@@ -1,0 +1,11 @@
+# clients.csv  —  one site per line:  user,ip[,domain]
+# Lines starting with # and blank lines are ignored.
+# A header row whose first column is "user" or "username" is auto-skipped.
+# domain is OPTIONAL: leave it out and the script auto-detects it on the server.
+# Tip: if one server hosts several sites, list each on its own line WITH its domain.
+#
+# user,ip,domain
+runcloud_user,198.51.100.10,example.com
+runcloud_user,198.51.100.10,shop.example.com
+another_user,203.0.113.5
+sysadmin,203.0.113.9,client-site.co.uk

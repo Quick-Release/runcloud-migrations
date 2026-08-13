@@ -1,0 +1,18 @@
+# ── Secrets & local config — NEVER commit ───────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Per-site generated data (WordPress backups, server profiles, run logs) ──
+/downloads/
+/config/
+/logs/
+
+# ── OS / editor cruft ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
