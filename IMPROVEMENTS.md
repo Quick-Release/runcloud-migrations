@@ -67,7 +67,7 @@ Triage order: do the top three first. They unlock everything else.
 
 - [x] **T10. Replace `_PI_COMMON_LOADED` guard with a per-function check or drop it.** The guard only protects against double-sourcing *in the same shell*, which never happens in practice (each script is a new shell). Once T4 splits the file, the guard becomes irrelevant; either drop it or move it into a tiny `_lib_common_loaded` helper.
 
-- [ ] **T11. Decide whether the Ploi `api_token` / `api_url` columns belong in `source-servers.csv`.** After the consolidation, the per-server token is redundant with the shared `PLOI_API_TOKEN`. Either:
+- [x] **T11. Decide whether the Ploi `api_token` / `api_url` columns belong in `source-servers.csv`.** After the consolidation, the per-server token is redundant with the shared `PLOI_API_TOKEN`. Either:
   - drop the columns from the CSV header and the `save_source_server` fieldnames entirely, OR
   - keep them as an explicit per-server override with documented semantics ("blank = use shared token")
   
