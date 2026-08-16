@@ -81,7 +81,7 @@ Triage order: do the top three first. They unlock everything else.
 
 ## Doc / hygiene
 
-- [ ] **T14. Replace remaining non-ASCII glyphs in the other shell scripts and the Python CLIs.** The character cleanup pass touched only `lib/common.sh`. `pli-wp-backup.sh`, `pli-site-info.sh`, `runcloud-wp-backup.sh`, `batch-migrate.sh`, `migrate`, `migrate-cli.py`, `backup`, etc. still contain `─`, `→`, `✔`, `✖`, `—`, `…`. Decide whether to clean all of them or none (consistency matters more than the choice itself).
+- [x] **T14. Replace remaining non-ASCII glyphs in the other shell scripts and the Python CLIs.** The character cleanup pass touched only `lib/common.sh`. `pli-wp-backup.sh`, `pli-site-info.sh`, `runcloud-wp-backup.sh`, `batch-migrate.sh`, `migrate`, `migrate-cli.py`, `backup`, etc. still contain `─`, `→`, `✔`, `✖`, `—`, `…`. Decide whether to clean all of them or none (consistency matters more than the choice itself).
 
 - [ ] **T15. Add `CONTRIBUTING.md` or extend README with the module conventions.** After T4 the codebase will have a clear shape; capture it in writing so the next contributor doesn't undo it. Document:
   - where new helpers go (`lib/output.sh`, `lib/strings.sh`, `lib/ploi.sh`, `lib/status.sh`)
