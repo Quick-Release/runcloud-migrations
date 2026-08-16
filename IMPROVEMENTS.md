@@ -35,7 +35,7 @@ Triage order: do the top three first. They unlock everything else.
   
   Write one `read_batch_csv(path)` helper that handles comments, blank lines, and optional header rows uniformly. Replace all four call sites. Update the four `.example` files to document one set of conventions.
 
-- [ ] **T6. Make `ask` / `ask_yn` accept their input and output streams.** They currently hardcode fd 0 (`read -r`) and fd 1 (`printf`). Change the signatures so tests can pass fakes:
+- [x] **T6. Make `ask` / `ask_yn` accept their input and output streams.** They currently hardcode fd 0 (`read -r`) and fd 1 (`printf`). Change the signatures so tests can pass fakes:
   ```bash
   ask() { ask_on "$1" "$2" >&2 <&3; }       # default: stdin/stdout behavior
   ask_on() { local prompt="$1" default="$2"; ... read -r reply <&3; printf '%s' "${reply:-$default}"; }
@@ -46,7 +46,7 @@ Triage order: do the top three first. They unlock everything else.
 
 ## Testability (depends on T3 and T6)
 
-- [ ] **T7. Add a test harness and the first test.** With T3 done (`lib/common.sh` is now pure at source time) and T6 done (`ask`/`ask_yn` accept injectable streams), write a test for the lowest-risk pure function first:
+- [x] **T7. Add a test harness and the first test.** With T3 done (`lib/common.sh` is now pure at source time) and T6 done (`ask`/`ask_yn` accept injectable streams), write a test for the lowest-risk pure function first:
   - `human_bytes` — pure, ~10 lines, easy to cover
   - `safe_name` / `safe_domain` / `safe_db_name` — pure string sanitizers
   - `ask` / `ask_yn` — verify the BATCH=1 short-circuit and the y/n loop using injected streams
@@ -65,7 +65,7 @@ Triage order: do the top three first. They unlock everything else.
 
 ## Smaller cleanups (do whenever, no dependency)
 
-- [ ] **T10. Replace `_PI_COMMON_LOADED` guard with a per-function check or drop it.** The guard only protects against double-sourcing *in the same shell*, which never happens in practice (each script is a new shell). Once T4 splits the file, the guard becomes irrelevant; either drop it or move it into a tiny `_lib_common_loaded` helper.
+- [x] **T10. Replace `_PI_COMMON_LOADED` guard with a per-function check or drop it.** The guard only protects against double-sourcing *in the same shell*, which never happens in practice (each script is a new shell). Once T4 splits the file, the guard becomes irrelevant; either drop it or move it into a tiny `_lib_common_loaded` helper.
 
 - [ ] **T11. Decide whether the Ploi `api_token` / `api_url` columns belong in `source-servers.csv`.** After the consolidation, the per-server token is redundant with the shared `PLOI_API_TOKEN`. Either:
   - drop the columns from the CSV header and the `save_source_server` fieldnames entirely, OR
