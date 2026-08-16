@@ -9,7 +9,7 @@ Triage order: do the top three first. They unlock everything else.
 
 ## High leverage (do first)
 
-- [ ] **T1. Extract `load_dotenv` / `save_dotenv` / `prompt` / `confirm` into a shared Python module.** Three identical copies in `backup`, `migrate`, and `migrate-cli.py`. Create `lib/cli_common.py` (or similar) and have all three CLIs `import` from it. Zero behaviour change; ~300 lines of duplicated code collapsed into one source of truth.
+- [x] **T1. Extract `load_dotenv` / `save_dotenv` / `prompt` / `confirm` into a shared Python module.** Three identical copies in `backup`, `migrate`, and `migrate-cli.py`. Create `lib/cli_common.py` (or similar) and have all three CLIs `import` from it. Zero behaviour change; ~300 lines of duplicated code collapsed into one source of truth.
 
 - [x] **T2. Delete `ploi_source_curl` and its siblings.** After the token consolidation, `ploi_curl` and `ploi_source_curl` differ only in comments. Update the two callers (`ploi-wp-backup.sh`, `pli-site-info.sh`) to call `ploi_curl`. Delete `pli_source_ssh_opts`, `pli_source_ssh_host`, `pli_source_remote`, `pli_source_scp` only if they have no remaining callers; otherwise keep them as thin aliases.
 
