@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Fake wp-cli for the find-wp fixture. Returns canned WordPress metadata.
+case "$*" in
+  *"option get siteurl"*) echo "https://example.com" ;;
+  *"core version"*)       echo "6.5" ;;
+  *"config get table_prefix"*) echo "wp_" ;;
+  *"config get DB_NAME"*) echo "example_db" ;;
+  *) echo "fake wp: $*" >&2; exit 1 ;;
+esac

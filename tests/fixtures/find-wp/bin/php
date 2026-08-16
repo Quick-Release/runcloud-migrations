@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Fake php for the find-wp fixture.
+if [[ "$*" == *"-v"* ]]; then
+  echo "PHP 8.2.0 (cli)"
+else
+  echo "fake php: $*" >&2
+  exit 1
+fi

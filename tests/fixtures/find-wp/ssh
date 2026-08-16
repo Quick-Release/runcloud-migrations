@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+echo "FAKE_SSH: cmd=${!#}" >&2
+cmd="${!#}"
+export HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$HOME/bin:$PATH"
+case "$cmd" in
+  'printf ok\n') echo "ok"; exit 0 ;;
+esac
+exec bash -c "$cmd"
