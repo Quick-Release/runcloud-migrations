@@ -111,7 +111,7 @@ def load_source_servers(path):
             name = row.get("name", "")
             if not name or name.startswith("#"):
                 continue
-            for key in ("ssh_key", "api_token", "api_url"):
+            for key in ("ssh_key",):
                 row[key] = expand_path(row.get(key, ""))
             servers.append(row)
     return servers
@@ -122,7 +122,7 @@ def save_source_server(path, server):
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "name", "type", "ssh_host", "ssh_port", "ssh_user", "ssh_key",
-        "api_token", "api_url", "server_id", "web_directory", "notes",
+        "server_id", "web_directory", "notes",
     ]
     write_header = not path.exists() or path.stat().st_size == 0
     with path.open("a", newline="") as f:
@@ -196,10 +196,14 @@ def ssh_probe(server, domain):
 
 
 def ploi_probe(server, domain, env=None):
-    """Probe a Ploi source server via API for a site matching domain."""
+    """Probe a Ploi source server via API for a site matching domain.
+
+    The Ploi API token and URL come from the shared .env variables
+    PLOI_API_TOKEN and PLOI_API_URL, not from the server inventory.
+    """
     env = env or {}
-    token = server.get("api_token") or env.get("PLOI_API_TOKEN")
-    api_url = server.get("api_url") or env.get("PLOI_API_URL") or "https://ploi.io/api"
+    token = env.get("PLOI_API_TOKEN")
+    api_url = env.get("PLOI_API_URL") or "https://ploi.io/api"
     if not token:
         return None
     try:
@@ -276,8 +280,6 @@ def ask_new_source_server(env):
     ssh_user = prompt("SSH username", ssh_user_default, required=True)
     ssh_key_default = env.get("SSH_KEY") or env.get("PLOI_SOURCE_SSH_KEY") or str(Path.home() / ".ssh/id_ed25519")
     ssh_key = prompt("SSH private key", ssh_key_default, required=True)
-    api_token = ""
-    api_url = ""
     server_id = ""
     web_directory = "/public"
     if stype == "ploi":
@@ -294,8 +296,6 @@ def ask_new_source_server(env):
         "ssh_port": ssh_port,
         "ssh_user": ssh_user,
         "ssh_key": ssh_key,
-        "api_token": api_token,
-        "api_url": api_url,
         "server_id": server_id,
         "web_directory": web_directory,
         "notes": notes,
@@ -352,8 +352,8 @@ def run_backup(match, domain, env):
             "PLOI_SOURCE_SSH_PORT": source.get("ssh_port", "22"),
             "PLOI_SOURCE_SSH_USER": source.get("ssh_user", "ploi"),
             "PLOI_SOURCE_SSH_KEY": source.get("ssh_key") or env.get("PLOI_SOURCE_SSH_KEY", ""),
-            "PLOI_API_TOKEN": source.get("api_token") or env.get("PLOI_API_TOKEN", ""),
-            "PLOI_API_URL": source.get("api_url") or env.get("PLOI_API_URL", "https://ploi.io/api"),
+            "PLOI_API_TOKEN": env.get("PLOI_API_TOKEN", ""),
+            "PLOI_API_URL": env.get("PLOI_API_URL", "https://ploi.io/api"),
             "PLOI_SOURCE_SERVER_ID": match.get("ploi_server_id", source.get("server_id", "")),
             "PLOI_SOURCE_WEB_DIRECTORY": source.get("web_directory", "/public"),
         })

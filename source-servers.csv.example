@@ -1,18 +1,28 @@
-# source-servers.csv  —  inventory of source servers for `migrate domain.tld`
+# source-servers.csv — inventory of source servers the migrate CLI can probe.
+#
+# Conventions:
+#   - Lines starting with # are treated as comments and ignored.
+#   - Blank lines are ignored.
+#   - The first non-comment row must be the header exactly as shown below.
+#   - Fields may have surrounding whitespace; it is trimmed.
+#
+# The Ploi API token and URL are shared across all source servers (one Ploi
+# account, multiple servers). They come from PLOI_API_TOKEN / PLOI_API_URL in
+# .env, not from this file.
 #
 # Columns:
-#   name,type,ssh_host,ssh_port,ssh_user,ssh_key,api_token,api_url,server_id,web_directory,notes
+#   name          - short label used in prompts/status (required)
+#   type          - runcloud | ploi | coolify | ssh
+#   ssh_host      - hostname or IP for SSH access
+#   ssh_port      - SSH port (default: 22)
+#   ssh_user      - SSH username
+#   ssh_key       - path to SSH private key (~ is expanded)
+#   server_id     - only needed for type=ploi (numeric Ploi server id)
+#   web_directory - web root suffix, usually /public (only for type=ploi)
+#   notes         - free text, optional
 #
-#   type: runcloud | ploi | coolify | ssh
-#   ssh_host: IP or hostname (without username; put username in ssh_user)
-#   ssh_user: SSH username
-#   ssh_key: path to private key
-#   api_token / api_url / server_id: only needed for type=ploi
-#   web_directory: only used for type=ploi (default /public)
-#   notes: free text
-#
-name,type,ssh_host,ssh_port,ssh_user,ssh_key,api_token,api_url,server_id,web_directory,notes
-runcloud-prod,runcloud,203.0.113.10,22,runcloud-user,~/.ssh/id_ed25519,,,,,/var/www,
-ploi-old,ploi,203.0.113.20,22,ploi,~/.ssh/id_ed25519,my-ploi-api-token,https://ploi.io/api,12345,/public,old Ploi server
-coolify-prod,coolify,203.0.113.30,22,root,~/.ssh/id_ed25519,,,,,/public,Coolify host
-do-legacy,ssh,203.0.113.40,22,root,~/.ssh/id_ed25519,,,,,DigitalOcean droplet
+name,type,ssh_host,ssh_port,ssh_user,ssh_key,server_id,web_directory,notes
+runcloud-prod,runcloud,198.51.100.10,22,runcloud-user,~/.ssh/id_ed25519,,,
+ploi-source,ploi,ploi.example.com,22,ploi,~/.ssh/id_ed25519,123,/public,source server
+coolify-node,coolify,203.0.113.5,22,root,~/.ssh/id_ed25519,,,
+plain-ssh,ssh,203.0.113.9,22,root,~/.ssh/id_ed25519,,,
