@@ -27,7 +27,7 @@ Triage order: do the top three first. They unlock everything else.
   
   Keep `lib/common.sh` as a thin shim that `source`s all of them so no caller changes. Goal is locality, not interface change.
 
-- [ ] **T5. Unify the four batch CSV formats behind one helper.** The codebase has four ad-hoc CSV parsers with four slightly different conventions on headers and comments:
+- [x] **T5. Unify the four batch CSV formats behind one helper.** The codebase has four ad-hoc CSV parsers with four slightly different conventions on headers and comments:
   - `clients.csv` (`user,ip[,domain]`) — parsed in `batch-migrate.sh`
   - `clients-ploi.csv` (`system_user,domain`) — parsed in `batch-migrate-ploi-source.sh`
   - `source-servers.csv` (11 columns) — parsed in `migrate`
@@ -75,7 +75,7 @@ Triage order: do the top three first. They unlock everything else.
 
 - [ ] **T12. Document the `BATCH=1` contract.** Multiple modules branch on `BATCH=1` to return defaults silently. Add a single doc block at the top of `lib/common.sh` (or the new `lib/output.sh` post-T4) listing every function that honours `BATCH` and what it does. Right now you have to grep to find out.
 
-- [ ] **T13. Verify `pli-migrate.sh` actually parses `pli-zips.csv`.** The format is documented and an example file ships, but I didn't see the parser in the grep. Confirm the parser exists and matches the documented format, or remove the `.example` file.
+- [x] **T13. Verify `pli-migrate.sh` actually parses `pli-zips.csv`.** The format is documented and an example file ships, but I didn't see the parser in the grep. Confirm the parser exists and matches the documented format, or remove the `.example` file.
 
 ---
 
