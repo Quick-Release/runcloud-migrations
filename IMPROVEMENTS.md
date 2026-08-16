@@ -73,7 +73,7 @@ Triage order: do the top three first. They unlock everything else.
   
   Right now they exist but their behaviour is undocumented and inconsistently wired (`run_backup` falls back, `pli_probe` falls back, `ask_new_source_server` does not). Pick one and document.
 
-- [ ] **T12. Document the `BATCH=1` contract.** Multiple modules branch on `BATCH=1` to return defaults silently. Add a single doc block at the top of `lib/common.sh` (or the new `lib/output.sh` post-T4) listing every function that honours `BATCH` and what it does. Right now you have to grep to find out.
+- [x] **T12. Document the `BATCH=1` contract.** Multiple modules branch on `BATCH=1` to return defaults silently. Add a single doc block at the top of `lib/common.sh` (or the new `lib/output.sh` post-T4) listing every function that honours `BATCH` and what it does. Right now you have to grep to find out.
 
 - [x] **T13. Verify `pli-migrate.sh` actually parses `pli-zips.csv`.** The format is documented and an example file ships, but I didn't see the parser in the grep. Confirm the parser exists and matches the documented format, or remove the `.example` file.
 
@@ -83,7 +83,7 @@ Triage order: do the top three first. They unlock everything else.
 
 - [x] **T14. Replace remaining non-ASCII glyphs in the other shell scripts and the Python CLIs.** The character cleanup pass touched only `lib/common.sh`. `pli-wp-backup.sh`, `pli-site-info.sh`, `runcloud-wp-backup.sh`, `batch-migrate.sh`, `migrate`, `migrate-cli.py`, `backup`, etc. still contain `─`, `→`, `✔`, `✖`, `—`, `…`. Decide whether to clean all of them or none (consistency matters more than the choice itself).
 
-- [ ] **T15. Add `CONTRIBUTING.md` or extend README with the module conventions.** After T4 the codebase will have a clear shape; capture it in writing so the next contributor doesn't undo it. Document:
+- [x] **T15. Add `CONTRIBUTING.md` or extend README with the module conventions.** After T4 the codebase will have a clear shape; capture it in writing so the next contributor doesn't undo it. Document:
   - where new helpers go (`lib/output.sh`, `lib/strings.sh`, `lib/ploi.sh`, `lib/status.sh`)
   - the rule against side effects at source time
   - the rule that modules take env or args, never both for the same thing
