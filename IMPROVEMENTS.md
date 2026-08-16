@@ -19,7 +19,7 @@ Triage order: do the top three first. They unlock everything else.
 
 ## Medium leverage (do once the top three are done)
 
-- [ ] **T4. Split `lib/common.sh` into focused sub-modules.** Today it is one 400-line file with 17 unrelated functions. Split into (at minimum):
+- [x] **T4. Split `lib/common.sh` into focused sub-modules.** Today it is one 400-line file with 17 unrelated functions. Split into (at minimum):
   - `lib/output.sh` — `log`/`warn`/`die`/`step`/`ask`/`ask_yn` + ANSI colors
   - `lib/strings.sh` — `safe_name`/`safe_domain`/`safe_db_name`/`human_bytes`/`random_password`/`trim`/`shquote`/`strip_ansi`
   - `lib/ploi.sh` — `pli_curl` + (post-T2) the SSH adapter family
