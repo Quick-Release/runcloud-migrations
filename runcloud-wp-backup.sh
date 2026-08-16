@@ -4,7 +4,7 @@
 # ----------------------------------------------------------------------------
 # Connects to a RunCloud server over SSH, finds a WordPress install (wp-cli),
 # exports its database, archives the whole site, and downloads it to ./downloads
-# as <domain>_<timestamp>.zip — ready to import on ploi.io.
+# as <domain>_<timestamp>.zip - ready to import on ploi.io.
 #
 # Designed to be run once per site. It asks for the SSH username + IP each run,
 # probes the server once (is `wp` available? is `zip` available? which PHP?)
@@ -14,7 +14,7 @@
 # Everything is also overridable non-interactively via env vars, so you can
 # batch all ~50 sites later:
 #   RC_USER=... RC_IP=... DOMAIN=... BATCH=1 ./runcloud-wp-backup.sh
-# (BATCH=1 makes every prompt accept its default — see batch-migrate.sh.)
+# (BATCH=1 makes every prompt accept its default - see batch-migrate.sh.)
 #
 # ----------------------------------------------------------------------------
 
@@ -26,8 +26,8 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 
-# ── paths & defaults ────────────────────────────────────────────────────────
-# shared helpers, paths, and .env loader (auto-loads ./lib/common.sh → ./.env)
+# -- paths & defaults --------------------------------------------------------
+# shared helpers, paths, and .env loader (auto-loads ./lib/common.sh -> ./.env)
 # shellcheck source=lib/common.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 load_env "$PROJECT_ROOT/.env"
@@ -42,25 +42,25 @@ SSH_PORT="${SSH_PORT:-22}"
 
 # (download/config/servers/logs dirs are created by lib/common.sh)
 
-# ── pretty output ───────────────────────────────────────────────────────────
+# -- pretty output -----------------------------------------------------------
 # (colors + log/warn/die/step provided by lib/common.sh)
 
-# ── small helpers ───────────────────────────────────────────────────────────
+# -- small helpers -----------------------------------------------------------
 # (shquote / ask / ask_yn / safe_name / trim provided by lib/common.sh)
 
-# ── sanity checks ───────────────────────────────────────────────────────────
+# -- sanity checks -----------------------------------------------------------
 [ -f "$SSH_KEY" ] || die "SSH private key not found: $SSH_KEY (set SSH_KEY=...)"
 for bin in ssh scp rsync zip; do
   command -v "$bin" >/dev/null 2>&1 || die "missing required local tool: $bin"
 done
 
-# ── gather connection details ─────────────────────────────────────────────
+# -- gather connection details ---------------------------------------------
 RC_USER="${RC_USER:-$(ask 'SSH username')}"
 [ -n "$RC_USER" ] || die "username is required"
 RC_IP="${RC_IP:-$(ask 'Server IP address')}"
 [ -n "$RC_IP" ] || die "IP address is required"
 
-# ── per-server cached capabilities ──────────────────────────────────────────
+# -- per-server cached capabilities ------------------------------------------
 SERVER_CONF="$SERVERS_DIR/$(safe_name "${RC_USER}_${RC_IP}").env"
 
 # load cache if present (PORT, WP_CMD, HAVE_ZIP, HAVE_RSYNC, PHP_BIN)
@@ -86,12 +86,12 @@ RSYNC_E="ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o Ser
 
 # run a command string on the remote host. The string is built locally and sent as
 # ONE arg, so $HOME / $(whoami) / ${HOME:-/tmp} etc. are expanded by the REMOTE
-# shell — that is intentional and required for the probes below.
+# shell - that is intentional and required for the probes below.
 # shellcheck disable=SC2029
 remote() { ssh "${SSH_OPTS[@]}" "$SSH_HOST" "$1"; }
 
-# ── test connection + host key ──────────────────────────────────────────────
-step "Connecting to $SSH_HOST:$SSH_PORT …"
+# -- test connection + host key ----------------------------------------------
+step "Connecting to $SSH_HOST:$SSH_PORT ..."
 # shellcheck disable=SC2016  # expands remotely by design
 conn=$(remote 'printf "ok %s@%s" "$(whoami)" "$(hostname)"' 2>&1) || \
   die "SSH connection failed: $conn"
@@ -100,9 +100,9 @@ case "$conn" in
   *)     die "SSH connection failed: $conn" ;;
 esac
 
-# ── capability probe (only if not cached) ───────────────────────────────────
+# -- capability probe (only if not cached) -----------------------------------
 if [ -z "$WP_CMD" ]; then
-  step "Probing server (wp-cli / zip / php) …"
+  step "Probing server (wp-cli / zip / php) ..."
   # shellcheck disable=SC2016  # expands remotely by design
   probe=$(remote '
     echo "HAVE_ZIP=$(command -v zip    >/dev/null 2>&1 && echo yes || echo no)"
@@ -130,7 +130,7 @@ if [ -z "$WP_CMD" ]; then
     [ "${P[HAVE_PHP]:-no}" = "yes" ] || die "wp-cli phar found but no php on PATH"
     WP_CMD="php ${P[WP_PHAR]}"
   elif [ "${P[HAVE_PHP]:-no}" = "yes" ]; then
-    warn "wp-cli not installed — downloading wp-cli.phar to \$HOME …"
+    warn "wp-cli not installed - downloading wp-cli.phar to \$HOME ..."
     # shellcheck disable=SC2016  # expands remotely by design
     remote '
       cd "$HOME" || exit 1
@@ -142,12 +142,12 @@ if [ -z "$WP_CMD" ]; then
     ' | grep -q ok || die "failed to download wp-cli.phar"
     WP_CMD="php \$HOME/wp-cli.phar"
   else
-    die "neither wp-cli nor php is available on the server — cannot export the DB"
+    die "neither wp-cli nor php is available on the server - cannot export the DB"
   fi
 
   # persist
   {
-    echo "# auto-generated $(date -u +%FT%TZ)  — safe to delete to force re-probe"
+    echo "# auto-generated $(date -u +%FT%TZ)  - safe to delete to force re-probe"
     echo "PORT=$(shquote "$SSH_PORT")"
     echo "PORT_CACHED=$(shquote "$SSH_PORT")"
     echo "WP_CMD=$(shquote "$WP_CMD")"
@@ -155,14 +155,14 @@ if [ -z "$WP_CMD" ]; then
     echo "HAVE_RSYNC=$(shquote "$HAVE_RSYNC")"
     echo "PHP_BIN=$(shquote "$PHP_BIN")"
   } > "$SERVER_CONF"
-  log "Saved server profile → $SERVER_CONF"
+  log "Saved server profile -> $SERVER_CONF"
 fi
 
-# ── quick wp-cli sanity test (uses chosen invocation) ───────────────────────
+# -- quick wp-cli sanity test (uses chosen invocation) -----------------------
 # done after we know the path below; placeholder note.
 
-# ── auto-detect WordPress path ──────────────────────────────────────────────
-step "Searching for WordPress installs …"
+# -- auto-detect WordPress path ----------------------------------------------
+step "Searching for WordPress installs ..."
 if [ -n "${WP_PATH:-}" ]; then
   log "Using WP_PATH from environment: $WP_PATH"
 else
@@ -197,14 +197,14 @@ fi
 fi
 log "WordPress path: $WP_PATH"
 
-# ── verify wp-cli works against this install ────────────────────────────────
-step "Verifying wp-cli can read this site …"
+# -- verify wp-cli works against this install --------------------------------
+step "Verifying wp-cli can read this site ..."
 wpver=$(remote "cd $(shquote "$WP_PATH") && $WP_CMD core version 2>/dev/null" || true)
 [ -n "$wpver" ] || die "wp-cli could not read the site at $WP_PATH (check PHP/DB perms)"
 log "wp-cli OK (WordPress $wpver)"
 
-# ── detect domain for the filename ──────────────────────────────────────────
-step "Detecting site URL …"
+# -- detect domain for the filename ------------------------------------------
+step "Detecting site URL ..."
 siteurl=$(remote "cd $(shquote "$WP_PATH") && $WP_CMD option get siteurl 2>/dev/null" || true)
 detected="${siteurl#*://}"; detected="${detected%%/*}"; detected="${detected%%:*}"
 DOMAIN="${DOMAIN:-$(ask 'Domain for the filename' "${detected:-}")}"
@@ -215,22 +215,22 @@ log "Domain: $DOMAIN"
 SITE_KEY="${MIGRATION_KEY:-${RC_USER}@${RC_IP}/${DOMAIN}}"
 update_status "$SITE_KEY" "discovered" "ok" "domain=$DOMAIN"
 
-# ── names & plan ────────────────────────────────────────────────────────────
+# -- names & plan ------------------------------------------------------------
 update_status "$SITE_KEY" "backed_up" "running" ""
 stamp=$(date +%Y%m%d-%H%M%S)
 FILE="${DOMAIN}_${stamp}.zip"
 DUMP_NAME="db_export_${stamp}.sql"
 
 if [ "$HAVE_ZIP" = "yes" ]; then
-  METHOD="remote zip → scp"
+  METHOD="remote zip -> scp"
 else
-  [ "$HAVE_RSYNC" = "yes" ] || die "server has neither zip nor rsync — cannot archive"
-  METHOD="rsync → local zip"
+  [ "$HAVE_RSYNC" = "yes" ] || die "server has neither zip nor rsync - cannot archive"
+  METHOD="rsync -> local zip"
 fi
 
-# ── disk-space checks ───────────────────────────────────────────────────────
+# -- disk-space checks -------------------------------------------------------
 RC_MIN_FREE_BYTES="${RC_MIN_FREE_BYTES:-2147483648}"
-step "Checking available space …"
+step "Checking available space ..."
 local_free=$(df -P "$DOWNLOADS" | awk 'NR==2 {print $4*1024}')
 [ "$local_free" -ge "$RC_MIN_FREE_BYTES" ] || die "not enough local disk space: $(human_bytes "$local_free") available, need $(human_bytes "$RC_MIN_FREE_BYTES")"
 # shellcheck disable=SC2016
@@ -251,24 +251,24 @@ ${C_B}Backup plan${C_0}
 PLAN
 ask_yn "Proceed with backup?" y || die "aborted"
 
-# ── 1) export database ──────────────────────────────────────────────────────
-step "Exporting database (wp db export) …"
+# -- 1) export database ------------------------------------------------------
+step "Exporting database (wp db export) ..."
 remote "cd $(shquote "$WP_PATH") && $WP_CMD db export $(shquote "$DUMP_NAME") --add-drop-table --allow-root" \
   || die "database export failed"
-log "DB exported → $WP_PATH/$DUMP_NAME"
+log "DB exported -> $WP_PATH/$DUMP_NAME"
 
-# ── 2) archive ──────────────────────────────────────────────────────────────
+# -- 2) archive --------------------------------------------------------------
 RC_CLEANUP_REMOTE_ZIP="${RC_CLEANUP_REMOTE_ZIP:-yes}"
 if [ "$HAVE_ZIP" = "yes" ]; then
-  step "Archiving on server (zip) …"
+  step "Archiving on server (zip) ..."
   # shellcheck disable=SC2016  # expands remotely by design
   tmpdir=$(remote 'mktemp -d "${HOME:-/tmp}/.wpbak.XXXXXX"' || true)
   [ -n "$tmpdir" ] || die "could not create remote temp dir"
   remote "cd $(shquote "$WP_PATH") && zip -r -q $(shquote "$tmpdir/$FILE") ." \
     || { [ "$RC_CLEANUP_REMOTE_ZIP" = "yes" ] && remote "rm -rf $(shquote "$tmpdir")"; die "remote zip failed"; }
-  step "Downloading $FILE …"
+  step "Downloading $FILE ..."
   if scp "${SCP_OPTS[@]}" "$SSH_HOST:$tmpdir/$FILE" "$DOWNLOADS/$FILE"; then
-    log "Downloaded → $DOWNLOADS/$FILE"
+    log "Downloaded -> $DOWNLOADS/$FILE"
     if [ "$RC_CLEANUP_REMOTE_ZIP" = "yes" ]; then
       remote "rm -rf $(shquote "$tmpdir")" || warn "could not remove remote temp $tmpdir"
     else
@@ -281,29 +281,29 @@ if [ "$HAVE_ZIP" = "yes" ]; then
     die "scp download failed (remote zip left behind only briefly; sql dump remains at $WP_PATH/$DUMP_NAME)"
   fi
 else
-  step "Archiving via rsync (no remote zip) …"
+  step "Archiving via rsync (no remote zip) ..."
   tmplocal="$(mktemp -d "$WORKSPACE/.dl.XXXXXX")"
   trap 'rm -rf "$tmplocal"' EXIT
   if rsync -a --info=progress2 -e "$RSYNC_E" "$SSH_HOST:$WP_PATH/" "$tmplocal/"; then
     ( cd "$tmplocal" && zip -r -q "$DOWNLOADS/$FILE" . ) || die "local zip failed"
-    log "Archived → $DOWNLOADS/$FILE"
+    log "Archived -> $DOWNLOADS/$FILE"
   else
     die "rsync failed (sql dump still on server at $WP_PATH/$DUMP_NAME)"
   fi
 fi
 
-# ── 3) verify the downloaded archive ────────────────────────────────────────
+# -- 3) verify the downloaded archive ----------------------------------------
 RC_VERIFY_ZIP="${RC_VERIFY_ZIP:-yes}"
 if [ "$RC_VERIFY_ZIP" = "yes" ]; then
-  step "Verifying downloaded archive …"
+  step "Verifying downloaded archive ..."
   unzip -t "$DOWNLOADS/$FILE" >/dev/null 2>&1 || die "downloaded archive is corrupt: $DOWNLOADS/$FILE"
   log "Archive verified"
 fi
 
-# ── 4) optional cleanup of DB dump on RunCloud ──────────────────────────────
+# -- 4) optional cleanup of DB dump on RunCloud ------------------------------
 RC_CLEANUP_DB_DUMP="${RC_CLEANUP_DB_DUMP:-yes}"
 if [ "$RC_CLEANUP_DB_DUMP" = "yes" ]; then
-  step "Cleaning up DB dump on RunCloud server …"
+  step "Cleaning up DB dump on RunCloud server ..."
   if remote "rm -f $(shquote "$WP_PATH/$DUMP_NAME")"; then
     log "DB dump removed from server"
   else
@@ -311,7 +311,7 @@ if [ "$RC_CLEANUP_DB_DUMP" = "yes" ]; then
   fi
 fi
 
-# ── done ────────────────────────────────────────────────────────────────────
+# -- done --------------------------------------------------------------------
 echo >&2
 update_status "$SITE_KEY" "backed_up" "ok" "zip=$DOWNLOADS/$FILE"
 log "Backup complete: $DOWNLOADS/$FILE"

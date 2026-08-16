@@ -107,12 +107,12 @@ while IFS=$'\t' read -r user domain || [ -n "${user:-}" ]; do
   update_status "$key" "backed_up" "pending" ""
 
   if [ "$RETRY_FAILED" -eq 1 ] && ! failed_already "$key"; then
-    results+=("SKIP     ${user}  ${domain}  — not in retry list")
+    results+=("SKIP     ${user}  ${domain}  - not in retry list")
     n_skip=$((n_skip + 1)); continue
   fi
 
   if [ "$FORCE" -ne 1 ] && done_already "$key"; then
-    results+=("SKIP     ${user}  ${domain}  — already backed up")
+    results+=("SKIP     ${user}  ${domain}  - already backed up")
     n_skip=$((n_skip + 1)); continue
   fi
 
@@ -122,7 +122,7 @@ while IFS=$'\t' read -r user domain || [ -n "${user:-}" ]; do
   fi
 
   echo
-  printf '%s── %s / %s ──%s\n' "$C_B" "$user" "$domain" "$C_0"
+  printf '%s-- %s / %s --%s\n' "$C_B" "$user" "$domain" "$C_0"
 
   child_env=( PLOI_SOURCE_SYSTEM_USER="$user" PLOI_SOURCE_DOMAIN="$domain" DOMAIN="$domain" BATCH=1 )
   clear_failed "$key"
@@ -140,13 +140,13 @@ while IFS=$'\t' read -r user domain || [ -n "${user:-}" ]; do
     update_status "$key" "backed_up" "ok" "zip=$(basename "$prod")"
     results+=("OK       ${user}  ${domain}  -> $(basename "$prod")")
     n_ok=$((n_ok + 1))
-    printf '%s✔ site done%s\n' "$C_G" "$C_0"
+    printf '%s[OK] site done%s\n' "$C_G" "$C_0"
   else
     mark_failed "$key" "exit ${rc}"
     update_status "$key" "backed_up" "fail" "exit=${rc}"
     results+=("FAIL     ${user}  ${domain}  (exit ${rc})")
     n_fail=$((n_fail + 1))
-    printf '%s✖ site failed (exit %s) — continuing%s\n' "$C_R" "$rc" "$C_0"
+    printf '%s[ERR] site failed (exit %s) - continuing%s\n' "$C_R" "$rc" "$C_0"
   fi
 done < <(read_batch_csv "$CSV" user system_user)
 
@@ -157,7 +157,7 @@ if [ "${#results[@]}" -gt 0 ]; then
 fi
 echo
 if [ "$DRY" -eq 1 ]; then
-  printf 'DRY RUN — total=%d  would-run=%d  skip=%d  invalid=%d\n' \
+  printf 'DRY RUN - total=%d  would-run=%d  skip=%d  invalid=%d\n' \
     "$n_total" "$n_plan" "$n_skip" "$n_bad"
 else
   printf 'total=%d  ok=%s%d%s  fail=%s%d%s  skip=%s%d%s  invalid=%d\n' \

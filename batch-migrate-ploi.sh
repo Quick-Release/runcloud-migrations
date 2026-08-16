@@ -85,7 +85,7 @@ while IFS=$'\t' read -r domain zip || [ -n "${domain:-}" ]; do
   [ -f "$zip" ] || { results+=("MISSING  ${domain}  ${zip}"); n_fail=$((n_fail + 1)); continue; }
 
   echo
-  printf '%s── %s ──%s\n' "$C_B" "$domain" "$C_0"
+  printf '%s-- %s --%s\n' "$C_B" "$domain" "$C_0"
 
   out=$( env DOMAIN="$domain" BATCH=1 bash "$RESTORE" "$zip" </dev/null 2>&1 )
   rc=$?
@@ -94,11 +94,11 @@ while IFS=$'\t' read -r domain zip || [ -n "${domain:-}" ]; do
   if [ "$rc" -eq 0 ]; then
     results+=("OK       ${domain}")
     n_ok=$((n_ok + 1))
-    printf '%s✔ site done%s\n' "$C_G" "$C_0"
+    printf '%s[OK] site done%s\n' "$C_G" "$C_0"
   else
     results+=("FAIL     ${domain}  (exit ${rc})")
     n_fail=$((n_fail + 1))
-    printf '%s✖ site failed (exit %s) — continuing%s\n' "$C_R" "$rc" "$C_0"
+    printf '%s[ERR] site failed (exit %s) - continuing%s\n' "$C_R" "$rc" "$C_0"
   fi
 done < <(read_batch_csv "$CSV" domain)
 
@@ -107,7 +107,7 @@ echo "=== results ==="
 for r in "${results[@]}"; do printf '  %s\n' "$r"; done
 echo
 if [ "$DRY" -eq 1 ]; then
-  printf 'DRY RUN — total=%d  would-run=%d\n' "$n_total" "$n_plan"
+  printf 'DRY RUN - total=%d  would-run=%d\n' "$n_total" "$n_plan"
 else
   printf 'total=%d  ok=%s%d%s  fail=%s%d%s\n' \
     "$n_total" "$C_G" "$n_ok" "$C_0" "$C_R" "$n_fail" "$C_0"

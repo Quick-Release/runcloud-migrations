@@ -33,7 +33,7 @@ for bin in ssh scp zip unzip; do
   command -v "$bin" >/dev/null 2>&1 || die "missing required local tool: $bin"
 done
 
-# ── config ─────────────────────────────────────────────────────────────────
+# -- config -----------------------------------------------------------------
 SSH_HOST="${SSH_HOST:-}"
 SSH_PORT="${SSH_PORT:-22}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
@@ -59,8 +59,8 @@ SSH_OPTS=(-i "$SSH_KEY" -p "$SSH_PORT"
 # shellcheck disable=SC2029
 remote() { ssh "${SSH_OPTS[@]}" "$SSH_HOST" "$1"; }
 
-# ── connection test ─────────────────────────────────────────────────────────
-step "Connecting to $SSH_HOST:$SSH_PORT …"
+# -- connection test ---------------------------------------------------------
+step "Connecting to $SSH_HOST:$SSH_PORT ..."
 # shellcheck disable=SC2016
 conn=$(remote 'printf "ok %s@%s" "$(whoami)" "$(hostname)"' 2>&1) || \
   die "SSH connection failed: $conn"
@@ -69,8 +69,8 @@ case "$conn" in
   *)     die "SSH connection failed: $conn" ;;
 esac
 
-# ── find WordPress path matching DOMAIN ─────────────────────────────────────
-step "Searching for WordPress install matching $DOMAIN …"
+# -- find WordPress path matching DOMAIN -------------------------------------
+step "Searching for WordPress install matching $DOMAIN ..."
 # shellcheck disable=SC2016
 wp_cmd=$(remote '
   if command -v wp >/dev/null 2>&1; then
@@ -128,7 +128,7 @@ done <<< "$paths"
 [ -n "$WP_PATH" ] || die "no WordPress install matches $DOMAIN on $SSH_HOST"
 log "WordPress path: $WP_PATH"
 
-# ── space checks & plan ─────────────────────────────────────────────────────
+# -- space checks & plan -----------------------------------------------------
 update_status "$SITE_KEY" "backed_up" "running" ""
 RC_MIN_FREE_BYTES="${RC_MIN_FREE_BYTES:-2147483648}"
 local_free=$(df -P "$DOWNLOADS_DIR" | awk 'NR==2 {print $4*1024}')
@@ -156,16 +156,16 @@ ${C_B}Backup plan${C_0}
 PLAN
 ask_yn "Proceed with backup?" y || die "aborted"
 
-# ── 1) export database ──────────────────────────────────────────────────────
-step "Exporting database …"
+# -- 1) export database ------------------------------------------------------
+step "Exporting database ..."
 # shellcheck disable=SC2086
 remote "cd $(shquote \"$WP_PATH\") && $wp_cmd db export $(shquote \"$DUMP_NAME\") --add-drop-table --allow-root" \
   || die "database export failed"
-log "DB exported → $WP_PATH/$DUMP_NAME"
+log "DB exported -> $WP_PATH/$DUMP_NAME"
 
-# ── 2) archive ──────────────────────────────────────────────────────────────
+# -- 2) archive --------------------------------------------------------------
 RC_CLEANUP_REMOTE_ZIP="${RC_CLEANUP_REMOTE_ZIP:-yes}"
-step "Archiving site files on server …"
+step "Archiving site files on server ..."
 # shellcheck disable=SC2086
 remote "
   cd $(shquote \"$WP_PATH\") &&
@@ -173,11 +173,11 @@ remote "
 " || { # shellcheck disable=SC2086
   remote "rm -rf $(shquote \"$REMOTE_ZIP_DIR\")" 2>/dev/null || true; die "remote zip failed"; }
 
-step "Downloading $FILE …"
+step "Downloading $FILE ..."
 if scp -P "$SSH_PORT" -i "$SSH_KEY" \
      -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
      "$SSH_HOST:$REMOTE_ZIP" "$DOWNLOADS_DIR/$FILE"; then
-  log "Downloaded → $DOWNLOADS_DIR/$FILE"
+  log "Downloaded -> $DOWNLOADS_DIR/$FILE"
 else
   # shellcheck disable=SC2086
   remote "rm -rf $(shquote \"$REMOTE_ZIP_DIR\")" 2>/dev/null || true
@@ -189,23 +189,23 @@ if [ "$RC_CLEANUP_REMOTE_ZIP" = "yes" ]; then
   remote "rm -rf $(shquote \"$REMOTE_ZIP_DIR\")" || warn "could not remove remote temp dir"
 fi
 
-# ── 3) verify archive ───────────────────────────────────────────────────────
+# -- 3) verify archive -------------------------------------------------------
 RC_VERIFY_ZIP="${RC_VERIFY_ZIP:-yes}"
 if [ "$RC_VERIFY_ZIP" = "yes" ]; then
-  step "Verifying downloaded archive …"
+  step "Verifying downloaded archive ..."
   unzip -t "$DOWNLOADS_DIR/$FILE" >/dev/null 2>&1 || die "downloaded archive is corrupt"
   log "Archive verified"
 fi
 
-# ── 4) cleanup DB dump on source ────────────────────────────────────────────
+# -- 4) cleanup DB dump on source --------------------------------------------
 RC_CLEANUP_DB_DUMP="${RC_CLEANUP_DB_DUMP:-yes}"
 if [ "$RC_CLEANUP_DB_DUMP" = "yes" ]; then
-  step "Cleaning up DB dump on source server …"
+  step "Cleaning up DB dump on source server ..."
   # shellcheck disable=SC2086
   remote "rm -f $(shquote \"$WP_PATH/$DUMP_NAME\")" || warn "could not remove DB dump"
 fi
 
-# ── done ────────────────────────────────────────────────────────────────────
+# -- done --------------------------------------------------------------------
 echo >&2
 update_status "$SITE_KEY" "backed_up" "ok" "zip=$DOWNLOADS_DIR/$FILE"
 log "Backup complete: $DOWNLOADS_DIR/$FILE"

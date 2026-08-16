@@ -39,7 +39,7 @@ def human_bytes(n):
 
 
 def run(cmd, env=None, cwd=None, check=True):
-    print(f"\n  → {cmd}\n")
+    print(f"\n  -> {cmd}\n")
     result = subprocess.run(cmd, shell=True, cwd=cwd, env=env)
     if check and result.returncode != 0:
         raise RuntimeError(f"Command failed with exit code {result.returncode}")
@@ -59,14 +59,14 @@ def check_tools():
         if check.returncode != 0:
             missing.append(tool)
     if missing:
-        print(f"✖ Missing required tools: {', '.join(missing)}")
+        print(f"[ERR] Missing required tools: {', '.join(missing)}")
         sys.exit(1)
     # rclone or aws is needed for R2 upload
     for r2_tool in ["rclone", "aws"]:
         check = subprocess.run(["bash", "-c", f"command -v {r2_tool}"], capture_output=True)
         if check.returncode == 0:
             return
-    print("✖ Missing an R2 upload tool: install rclone (https://rclone.org) or the AWS CLI v2.")
+    print("[ERR] Missing an R2 upload tool: install rclone (https://rclone.org) or the AWS CLI v2.")
     sys.exit(1)
 
 
@@ -113,7 +113,7 @@ def write_report(metadata, client_email, report_dir):
         expires = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [
-        f"# Backup Report — {metadata.get('app_name', app)}",
+        f"# Backup Report - {metadata.get('app_name', app)}",
         "",
         f"- **Source**: RunCloud server `{metadata.get('server_ip', '')}` (user: `{metadata.get('ssh_user', '')}`)",
         f"- **App directory**: `{metadata.get('app_dir', '')}`",
@@ -218,7 +218,7 @@ def backup_runcloud(env):
 
     report_dir = ROOT / "reports"
     report_path = write_report(metadata, client_email, report_dir)
-    print(f"\n  ✔ Backup report written: {report_path}")
+    print(f"\n  [OK] Backup report written: {report_path}")
 
     # Optionally send email via Cloudflare Email Service REST API.
     token = env.get("CLOUDFLARE_API_TOKEN")
@@ -248,10 +248,10 @@ def backup_runcloud(env):
                 f"Your backup for {app} is ready", text, html
             )
             if ok:
-                print(f"  ✔ Email sent to {client_email}")
+                print(f"  [OK] Email sent to {client_email}")
             else:
                 msg = result.get("message", str(result))
-                print(f"  ✖ Email failed: {msg}")
+                print(f"  [ERR] Email failed: {msg}")
 
     # Save non-secret defaults back to .env for next time.
     save_env = {
@@ -274,10 +274,10 @@ def backup_runcloud(env):
             "R2_SECRET_ACCESS_KEY": r2_secret,
         })
     save_dotenv(ENV_FILE, save_env)
-    print(f"  ✔ Saved settings to {ENV_FILE}")
+    print(f"  [OK] Saved settings to {ENV_FILE}")
 
     print("\n" + "=" * 60)
-    print("  ✔ Backup complete")
+    print("  [OK] Backup complete")
     print("=" * 60)
     print(f"  App:        {app}")
     print(f"  WordPress:  {metadata.get('is_wordpress', 'no')}")
@@ -291,7 +291,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
 def test_r2(env):
     print("\n--- R2 bucket read/write test ---")
-    print("Checking .env / environment for R2 credentials …")
+    print("Checking .env / environment for R2 credentials ...")
 
     r2_bucket = prompt("R2 bucket name", env.get("R2_BUCKET"), required=True)
     r2_account = prompt("R2 account ID", env.get("R2_ACCOUNT_ID"), required=True)
@@ -320,7 +320,7 @@ def test_r2(env):
             env=child_env,
             text=True,
         ).strip()
-        print(f"\n  ✔ Write succeeded")
+        print(f"\n  [OK] Write succeeded")
         print(f"  Bucket: {r2_bucket}")
         print(f"  Key:    {object_key}")
         print(f"  URL:    {url}")
@@ -332,9 +332,9 @@ def test_r2(env):
             text=True,
         )
         if read_check.returncode == 0 and read_check.stdout.strip() == "200":
-            print("  ✔ Read succeeded (HTTP 200)")
+            print("  [OK] Read succeeded (HTTP 200)")
         else:
-            print(f"  ✖ Read check failed: HTTP {read_check.stdout.strip()}")
+            print(f"  [ERR] Read check failed: HTTP {read_check.stdout.strip()}")
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"R2 upload failed: {e.stderr or e.output or 'unknown error'}")
     finally:
@@ -350,7 +350,7 @@ def test_r2(env):
     if confirm("Save R2 secret access key to .env?", default=False):
         save_env["R2_SECRET_ACCESS_KEY"] = r2_secret
     save_dotenv(ENV_FILE, save_env)
-    print(f"  ✔ Saved settings to {ENV_FILE}")
+    print(f"  [OK] Saved settings to {ENV_FILE}")
 
 
 def main():
@@ -365,7 +365,7 @@ def main():
     if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
         if confirm(".env not found. Create it from .env.example?", default=True):
             ENV_FILE.write_text(ENV_EXAMPLE.read_text())
-            print(f"  ✔ Created {ENV_FILE}")
+            print(f"  [OK] Created {ENV_FILE}")
 
     env = load_dotenv(ENV_FILE)
 
@@ -382,5 +382,5 @@ if __name__ == "__main__":
         print("\n\n  Aborted.")
         sys.exit(1)
     except RuntimeError as e:
-        print(f"\n✖ {e}")
+        print(f"\n[ERR] {e}")
         sys.exit(1)

@@ -55,7 +55,7 @@ SSH_OPTS=(-i "$SSH_KEY" -p "$SSH_PORT"
 # shellcheck disable=SC2029
 remote() { ssh "${SSH_OPTS[@]}" "$SSH_HOST" "$1"; }
 
-step "Connecting to $SSH_HOST:$SSH_PORT …"
+step "Connecting to $SSH_HOST:$SSH_PORT ..."
 # shellcheck disable=SC2016
 conn=$(remote 'printf "ok %s@%s" "$(whoami)" "$(hostname)"' 2>&1) || \
   die "SSH connection failed: $conn"
@@ -68,7 +68,7 @@ if [ -f "$SERVER_CONF" ]; then
   . "$SERVER_CONF"
 fi
 if [ -z "$WP_CMD" ]; then
-  step "Probing for wp-cli …"
+  step "Probing for wp-cli ..."
   # shellcheck disable=SC2016
   probe=$(remote '
     echo "HAVE_WP=$(command -v wp >/dev/null 2>&1 && echo yes || echo no)"
@@ -99,7 +99,7 @@ if [ -z "$WP_CMD" ]; then
   fi
 fi
 
-step "Searching for WordPress installs …"
+step "Searching for WordPress installs ..."
 # shellcheck disable=SC2016
 WP_FIND='
 for root in "$HOME" /var/www /var/www/html /srv /webapps /usr/share/nginx/html /home; do
@@ -122,7 +122,7 @@ mkdir -p "$(dirname "$OUT")"
     "path" "domain" "wp_version" "php_version" "db_prefix" "db_size" "files_size" "php_binary"
   for WP_PATH in "${cand_arr[@]}"; do
     wpver=$(remote "cd $(shquote "$WP_PATH") && $WP_CMD core version 2>/dev/null" || true)
-    [ -n "$wpver" ] || { warn "wp-cli could not read $WP_PATH — skipping"; continue; }
+    [ -n "$wpver" ] || { warn "wp-cli could not read $WP_PATH - skipping"; continue; }
 
     siteurl=$(remote "cd $(shquote "$WP_PATH") && $WP_CMD option get siteurl 2>/dev/null" || true)
     domain="${siteurl#*://}"; domain="${domain%%/*}"; domain="${domain%%:*}"

@@ -38,7 +38,7 @@ SOURCE_SERVERS_EXAMPLE = ROOT / "source-servers.csv.example"
 
 def run(cmd, env=None, cwd=None, check=True):
     """Run a shell command, streaming output to the terminal."""
-    print(f"\n  → {cmd}\n")
+    print(f"\n  -> {cmd}\n")
     result = subprocess.run(cmd, shell=True, cwd=cwd, env=env)
     if check and result.returncode != 0:
         raise RuntimeError(f"Command failed with exit code {result.returncode}")
@@ -53,7 +53,7 @@ def check_tools():
         if check.returncode != 0:
             missing.append(tool)
     if missing:
-        print(f"✖ Missing required tools: {', '.join(missing)}")
+        print(f"[ERR] Missing required tools: {', '.join(missing)}")
         sys.exit(1)
 
 
@@ -78,7 +78,7 @@ def ploi_get_servers(token, api_url):
     ok, data = ploi_api_request(token, api_url, "servers")
     if not ok:
         msg = data.get("message", "unknown error")
-        print(f"✖ Ploi API error: {msg}")
+        print(f"[ERR] Ploi API error: {msg}")
         return []
     return data.get("data", [])
 
@@ -95,7 +95,7 @@ def ploi_pick_server(token, api_url, label):
     try:
         return str(servers[int(choice) - 1]["id"])
     except (ValueError, IndexError):
-        print("✖ Invalid server selection")
+        print("[ERR] Invalid server selection")
         sys.exit(1)
 
 
@@ -252,14 +252,14 @@ def probe_all_sources(servers, domain, env=None, source_type=None):
         stype = server.get("type")
         if source_type and stype != source_type:
             continue
-        print(f"  → Checking {server.get('name')} ({stype}) …")
+        print(f"  -> Checking {server.get('name')} ({stype}) ...")
         if stype == "ploi":
             m = ploi_probe(server, domain, env)
         else:
             m = ssh_probe(server, domain)
         if m:
             matches.append(m)
-            print(f"    ✔ found at {m.get('wp_path') or m.get('site_root')}")
+            print(f"    [OK] found at {m.get('wp_path') or m.get('site_root')}")
     return matches
 
 
@@ -311,12 +311,12 @@ def choose_match(matches, domain):
     for i, m in enumerate(matches, 1):
         srv = m["server"]
         loc = m.get("wp_path") or m.get("site_root") or "(API match)"
-        print(f"    {i}) {srv.get('name')} ({srv.get('type')}) — {loc}")
+        print(f"    {i}) {srv.get('name')} ({srv.get('type')}) - {loc}")
     choice = prompt("Use which source?", "1")
     try:
         return matches[int(choice) - 1]
     except (ValueError, IndexError):
-        print("✖ Invalid selection")
+        print("[ERR] Invalid selection")
         sys.exit(1)
 
 
@@ -412,14 +412,14 @@ def prompt_or_confirm(msg, key, env, default=None, secret=False):
     existing = env.get(key)
     if existing:
         masked = "*****" if secret else existing
-        print(f"  ✔ {msg} already set: [{masked}]")
+        print(f"  [OK] {msg} already set: [{masked}]")
         return existing
     return prompt(msg, default, secret=secret)
 
 
 def interactive_setup(env):
     print("\n" + "=" * 60)
-    print("  migrate setup — configure credentials")
+    print("  migrate setup - configure credentials")
     print("=" * 60)
     print("  Already-set values are shown with a green checkmark and skipped.")
     print("  Leave a value empty to skip it. Current defaults are shown in brackets.")
@@ -436,7 +436,7 @@ def interactive_setup(env):
     updates["CLIENTS_CSV"] = prompt_or_confirm("Batch CSV path", "CLIENTS_CSV", env,
                                               env.get("CLIENTS_CSV") or "config/clients.csv")
 
-    print("\n--- Ploi source (for Ploi → Ploi) ---")
+    print("\n--- Ploi source (for Ploi -> Ploi) ---")
     updates["PLOI_SOURCE_SSH_HOST"] = prompt_or_confirm("Ploi source SSH host", "PLOI_SOURCE_SSH_HOST", env)
     updates["PLOI_SOURCE_SSH_USER"] = prompt_or_confirm("Ploi source SSH user", "PLOI_SOURCE_SSH_USER", env, "ploi")
     updates["PLOI_SOURCE_SSH_KEY"] = prompt_or_confirm("Ploi source SSH key", "PLOI_SOURCE_SSH_KEY", env,
@@ -484,9 +484,9 @@ def interactive_setup(env):
 
     if updates:
         save_dotenv(ENV_FILE, updates)
-        print(f"\n  ✔ Saved {len(updates)} value(s) to {ENV_FILE}")
+        print(f"\n  [OK] Saved {len(updates)} value(s) to {ENV_FILE}")
     else:
-        print("\n  → No changes to save.")
+        print("\n  -> No changes to save.")
 
     print("\n  You can now run:")
     print("    migrate example.com")
@@ -512,7 +512,7 @@ def main():
         if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
             if confirm(".env not found. Create it from .env.example?", default=True):
                 ENV_FILE.write_text(ENV_EXAMPLE.read_text())
-                print(f"  ✔ Created {ENV_FILE}")
+                print(f"  [OK] Created {ENV_FILE}")
         env = load_dotenv(ENV_FILE)
         interactive_setup(env)
         return
@@ -524,7 +524,7 @@ def main():
             sys.exit(1)
 
         print("=" * 60)
-        print(f"  migrate {domain} → Ploi")
+        print(f"  migrate {domain} -> Ploi")
         print("=" * 60)
 
         check_tools()
@@ -532,7 +532,7 @@ def main():
         if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
             if confirm(".env not found. Create it from .env.example?", default=True):
                 ENV_FILE.write_text(ENV_EXAMPLE.read_text())
-                print(f"  ✔ Created {ENV_FILE}")
+                print(f"  [OK] Created {ENV_FILE}")
 
         env = load_dotenv(ENV_FILE)
         servers_file = source_servers_file(env)
@@ -541,8 +541,8 @@ def main():
             if confirm("Source server inventory not found. Create it from source-servers.csv.example?", default=True):
                 servers_file.parent.mkdir(parents=True, exist_ok=True)
                 servers_file.write_text(SOURCE_SERVERS_EXAMPLE.read_text())
-                print(f"  ✔ Created {servers_file}")
-                print("  → Edit that file with your real source servers, then rerun.")
+                print(f"  [OK] Created {servers_file}")
+                print("  -> Edit that file with your real source servers, then rerun.")
                 sys.exit(0)
 
         servers = load_source_servers(servers_file)
@@ -567,13 +567,13 @@ def main():
             else:
                 m = ssh_probe(server, domain)
             if not m:
-                print(f"✖ Still could not find {domain} on {server.get('name')}")
+                print(f"[ERR] Still could not find {domain} on {server.get('name')}")
                 sys.exit(1)
             matches = [m]
 
         match = choose_match(matches, domain)
         source = match["server"]
-        print(f"\n  → Source: {source.get('name')} ({source.get('type')}) — "
+        print(f"\n  -> Source: {source.get('name')} ({source.get('type')}) - "
               f"{match.get('wp_path') or match.get('site_root')}")
 
         if not confirm(f"Migrate {domain} from this source?", default=True):
@@ -583,14 +583,14 @@ def main():
         target_env = configure_target(env, target_server_id_arg=args.target_server_id)
         env.update(target_env)
         save_dotenv(ENV_FILE, env)
-        print(f"\n  ✔ Saved target settings to {ENV_FILE}")
+        print(f"\n  [OK] Saved target settings to {ENV_FILE}")
 
         run_backup(match, domain, env)
         zip_file = find_latest_zip(domain)
         if not zip_file:
-            print(f"\n✖ Backup succeeded but no zip was found in ./downloads for {domain}")
+            print(f"\n[ERR] Backup succeeded but no zip was found in ./downloads for {domain}")
             sys.exit(1)
-        print(f"\n  ✔ Backup zip: {zip_file}")
+        print(f"\n  [OK] Backup zip: {zip_file}")
 
         if not confirm("Restore this backup to the target Ploi server?", default=True):
             print(f"\n  Backup is ready: {zip_file}")
@@ -601,7 +601,7 @@ def main():
         run_restore(domain, zip_file, target_env)
 
         print("\n" + "=" * 60)
-        print("  ✔ Migration complete")
+        print("  [OK] Migration complete")
         print("=" * 60)
         print(f"  Site:   https://{domain}")
         print(f"  Backup: {zip_file}")
@@ -626,5 +626,5 @@ if __name__ == "__main__":
         print("\n\n  Aborted.")
         sys.exit(1)
     except RuntimeError as e:
-        print(f"\n✖ {e}")
+        print(f"\n[ERR] {e}")
         sys.exit(1)

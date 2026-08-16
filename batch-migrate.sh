@@ -8,7 +8,7 @@
 #   user,ip[,domain]
 #   - lines starting with # and blank lines are ignored
 #   - a header row whose first column is "user"/"username" is auto-skipped
-#   - domain is OPTIONAL — auto-detected on the server if omitted
+#   - domain is OPTIONAL - auto-detected on the server if omitted
 #   - CRLF (Excel/Windows) line endings are tolerated
 #
 # Usage:
@@ -28,9 +28,9 @@
 # SSH_KEY. Per-CSV-row values take precedence for RC_USER/RC_IP/DOMAIN.
 # ----------------------------------------------------------------------------
 
-set -uo pipefail            # NOTE: no -e — a single site failure must not abort the batch
+set -uo pipefail            # NOTE: no -e - a single site failure must not abort the batch
 
-# shared helpers, paths, and .env loader (auto-loads ./lib/common.sh → ./.env)
+# shared helpers, paths, and .env loader (auto-loads ./lib/common.sh -> ./.env)
 # shellcheck source=lib/common.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 load_env "$PROJECT_ROOT/.env"
@@ -56,7 +56,7 @@ usage() {
   sed -n '3,30p' "$0" | sed 's/^# \{0,1\}//'
 }
 
-# ── args ────────────────────────────────────────────────────────────────────
+# -- args --------------------------------------------------------------------
 while [ $# -gt 0 ]; do
   case "$1" in
     --csv)          CSV="$2"; shift 2 ;;
@@ -72,9 +72,9 @@ done
 [ -f "$BACKUP" ] || die "backup script not found: $BACKUP"
 [ -f "$CSV" ]    || die "CSV not found: $CSV (use --csv PATH or create clients.csv)"
 
-# ── helpers ─────────────────────────────────────────────────────────────────
+# -- helpers -----------------------------------------------------------------
 is_ip() { [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; }
-key_of() { # user ip domain → resume key
+key_of() { # user ip domain -> resume key
   if [ -n "$3" ]; then printf '%s@%s/%s' "$1" "$2" "$3"; else printf '%s@%s' "$1" "$2"; fi
 }
 done_already() {
@@ -95,7 +95,7 @@ clear_failed() { # remove a key from the failed list
 }
 strip_ansi() { printf '%s' "$1" | sed $'s/\x1b\[[0-9;]*m//g'; }
 
-# ── logging: mirror everything to a timestamped log ─────────────────────────
+# -- logging: mirror everything to a timestamped log -------------------------
 TS="$(date +%Y%m%d-%H%M%S)"
 LOG="$LOGDIR/batch_${TS}.log"
 mkdir -p "$LOGDIR"
@@ -104,11 +104,11 @@ exec > >(tee -a "$LOG") 2>&1
 printf '=== batch run %s | csv=%s force=%s dry=%s limit=%s retry-failed=%s ===\n' \
   "$(date)" "$CSV" "$FORCE" "$DRY" "${LIMIT:-all}" "$RETRY_FAILED"
 
-# ── counters ────────────────────────────────────────────────────────────────
+# -- counters ----------------------------------------------------------------
 n_total=0; n_ok=0; n_fail=0; n_skip=0; n_bad=0; n_plan=0
 results=()
 
-# ── main loop (runs in this shell; child reads /dev/null, not the CSV) ──────
+# -- main loop (runs in this shell; child reads /dev/null, not the CSV) ------
 # CSV normalized by lib/csv.sh: comments, blank lines, and header rows removed;
 # fields are tab-separated and trimmed.
 while IFS=$'\t' read -r user ip domain || [ -n "${user:-}" ]; do
@@ -121,7 +121,7 @@ while IFS=$'\t' read -r user ip domain || [ -n "${user:-}" ]; do
 
   # validate IP
   if [ -z "$ip" ] || ! is_ip "$ip"; then
-    results+=("INVALID  ${user}  ${ip:-(no ip)}  — bad/missing IP")
+    results+=("INVALID  ${user}  ${ip:-(no ip)}  - bad/missing IP")
     n_bad=$((n_bad + 1)); continue
   fi
 
@@ -130,13 +130,13 @@ while IFS=$'\t' read -r user ip domain || [ -n "${user:-}" ]; do
 
   # retry-failed mode: skip unless this key is in the failed list
   if [ "$RETRY_FAILED" -eq 1 ] && ! failed_already "$key"; then
-    results+=("SKIP     ${user}  ${ip}  ${domain:-(auto)}  — not in retry list")
+    results+=("SKIP     ${user}  ${ip}  ${domain:-(auto)}  - not in retry list")
     n_skip=$((n_skip + 1)); continue
   fi
 
   # resume?
   if [ "$FORCE" -ne 1 ] && done_already "$key"; then
-    results+=("SKIP     ${user}  ${ip}  ${domain:-(auto)}  — already backed up")
+    results+=("SKIP     ${user}  ${ip}  ${domain:-(auto)}  - already backed up")
     n_skip=$((n_skip + 1)); continue
   fi
 
@@ -145,9 +145,9 @@ while IFS=$'\t' read -r user ip domain || [ -n "${user:-}" ]; do
     n_plan=$((n_plan + 1)); continue
   fi
 
-  # ── run one site ──────────────────────────────────────────────────────────
+  # -- run one site ----------------------------------------------------------
   echo
-  printf '%s── %s @ %s  (%s) ──%s\n' "$C_B" "$user" "$ip" "${domain:-auto-detect domain}" "$C_0"
+  printf '%s-- %s @ %s  (%s) --%s\n' "$C_B" "$user" "$ip" "${domain:-auto-detect domain}" "$C_0"
 
   # build env, run child fully non-interactively
   child_env=( RC_USER="$user" RC_IP="$ip" BATCH=1 )
@@ -169,17 +169,17 @@ while IFS=$'\t' read -r user ip domain || [ -n "${user:-}" ]; do
     update_status "$key" "backed_up" "ok" "zip=$(basename "$prod")"
     results+=("OK       ${user}  ${ip}  ${domain:-(auto)}  -> $(basename "$prod")")
     n_ok=$((n_ok + 1))
-    printf '%s✔ site done%s\n' "$C_G" "$C_0"
+    printf '%s[OK] site done%s\n' "$C_G" "$C_0"
   else
     mark_failed "$key" "exit ${rc}"
     update_status "$key" "backed_up" "fail" "exit=${rc}"
     results+=("FAIL     ${user}  ${ip}  ${domain:-(auto)}  (exit ${rc})")
     n_fail=$((n_fail + 1))
-    printf '%s✖ site failed (exit %s) — continuing%s\n' "$C_R" "$rc" "$C_0"
+    printf '%s[ERR] site failed (exit %s) - continuing%s\n' "$C_R" "$rc" "$C_0"
   fi
 done < <(read_batch_csv "$CSV" user username)
 
-# ── summary ─────────────────────────────────────────────────────────────────
+# -- summary -----------------------------------------------------------------
 echo
 echo "=== results ==="
 if [ "${#results[@]}" -gt 0 ]; then
@@ -187,7 +187,7 @@ if [ "${#results[@]}" -gt 0 ]; then
 fi
 echo
 if [ "$DRY" -eq 1 ]; then
-  printf 'DRY RUN — total=%d  would-run=%d  skip=%d  invalid=%d\n' \
+  printf 'DRY RUN - total=%d  would-run=%d  skip=%d  invalid=%d\n' \
     "$n_total" "$n_plan" "$n_skip" "$n_bad"
 else
   printf 'total=%d  ok=%s%d%s  fail=%s%d%s  skip=%s%d%s  invalid=%d\n' \

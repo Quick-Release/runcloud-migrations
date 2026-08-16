@@ -71,7 +71,7 @@ action is irreversible.
 WARN
 ask_yn "Really remove this Coolify service?" n || die "aborted"
 
-step "Stopping and removing Coolify service …"
+step "Stopping and removing Coolify service ..."
 # shellcheck disable=SC2086
 remote "
   cd $(shquote \"$SERVICE_DIR\") || exit 1
@@ -83,7 +83,7 @@ remote "
 " || warn "docker compose down failed (containers may already be stopped)"
 
 if [ "$COOLIFY_REMOVE_DATA" = "yes" ]; then
-  step "Removing service directory and bind-mounted data …"
+  step "Removing service directory and bind-mounted data ..."
   # shellcheck disable=SC2086
   remote "rm -rf $(shquote \"$SERVICE_DIR\")" || die "could not remove $SERVICE_DIR"
   log "Removed $SERVICE_DIR"

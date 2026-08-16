@@ -2,7 +2,7 @@
 #
 # ploi-to-ploi.sh
 # ----------------------------------------------------------------------------
-# End-to-end migration for a single site: Ploi source → Ploi target.
+# End-to-end migration for a single site: Ploi source -> Ploi target.
 # Wraps ploi-wp-backup.sh and ploi-migrate.sh with status tracking and a
 # single point of control.
 #
@@ -45,11 +45,11 @@ SITE_KEY="ploi-to-ploi:${SYSTEM_USER}@${PLOI_SOURCE_SSH_HOST:-?}/${DOMAIN}"
 
 step "End-to-end migration: $SITE_KEY"
 
-# ── 1) backup from source Ploi ────────────────────────────────────────────────
+# -- 1) backup from source Ploi ------------------------------------------------
 update_status "$SITE_KEY" "backed_up" "running" ""
 child_env=( PLOI_SOURCE_SYSTEM_USER="$SYSTEM_USER" PLOI_SOURCE_DOMAIN="$DOMAIN" DOMAIN="$DOMAIN" BATCH=1 )
 
-step "Phase 1/2 — Ploi source backup"
+step "Phase 1/2 - Ploi source backup"
 out=$( env "${child_env[@]}" bash "$BACKUP" </dev/null 2>&1 ) || {
   update_status "$SITE_KEY" "backed_up" "fail" "exit=$?"
   printf '%s\n' "$out"
@@ -63,8 +63,8 @@ zip_path="$(strip_ansi "$zip_path")"
 log "Backup produced: $zip_path"
 update_status "$SITE_KEY" "backed_up" "ok" "zip=$zip_path"
 
-# ── 2) restore to target Ploi ───────────────────────────────────────────────
-step "Phase 2/2 — Ploi target restore"
+# -- 2) restore to target Ploi -----------------------------------------------
+step "Phase 2/2 - Ploi target restore"
 update_status "$SITE_KEY" "restored" "running" ""
 if env DOMAIN="$DOMAIN" MIGRATION_KEY="$SITE_KEY" BATCH=1 bash "$RESTORE" "$zip_path" </dev/null 2>&1; then
   update_status "$SITE_KEY" "restored" "ok" ""

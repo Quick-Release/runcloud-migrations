@@ -52,10 +52,10 @@ SSH_HOST="${RC_USER}@${RC_IP}"
 # shellcheck disable=SC2029
 remote() { ssh "${SSH_OPTS[@]}" "$SSH_HOST" "$1"; }
 
-step "Connecting to RunCloud server $SSH_HOST …"
+step "Connecting to RunCloud server $SSH_HOST ..."
 remote 'printf ok\n' >/dev/null || die "SSH connection failed to $SSH_HOST"
 
-step "Locating app directory for '$RC_APP_NAME}' …"
+step "Locating app directory for '$RC_APP_NAME}' ..."
 APP_DIR=$(
   # shellcheck disable=SC2016
   remote "
@@ -76,7 +76,7 @@ if remote "[ -f $(shquote "$APP_DIR/wp-config.php") ]"; then
   IS_WORDPRESS="yes"
   log "WordPress detected in $APP_DIR"
 else
-  warn "No wp-config.php found — backing up files only"
+  warn "No wp-config.php found - backing up files only"
 fi
 
 stamp=$(date +%Y%m%d-%H%M%S)
@@ -91,7 +91,7 @@ REMOTE_TEMP=$(
 [ -n "$REMOTE_TEMP" ] || die "Could not create remote temp directory"
 
 if [ "$IS_WORDPRESS" = "yes" ]; then
-  step "Exporting WordPress database …"
+  step "Exporting WordPress database ..."
   creds_tmp=$(mktemp)
   trap 'rm -f "$creds_tmp"' EXIT
 
@@ -136,7 +136,7 @@ else
   MYSQL_PRESERVE=""
 fi
 
-step "Creating remote zip archive …"
+step "Creating remote zip archive ..."
 # shellcheck disable=SC2016
 remote "
   cd $(shquote "$APP_DIR") || exit 1
@@ -157,7 +157,7 @@ REMOTE_SIZE=$(
 )
 [ -n "$REMOTE_SIZE" ] || warn "Could not read remote zip size"
 
-step "Downloading backup to $LOCAL_ZIP …"
+step "Downloading backup to $LOCAL_ZIP ..."
 scp -P "$SSH_PORT" -i "$SSH_KEY" \
   -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
   "$SSH_HOST:$REMOTE_TEMP/$ZIP_NAME" "$LOCAL_ZIP" || die "Download failed"
@@ -168,11 +168,11 @@ if [ -f "$LOCAL_ZIP" ]; then
     warn "Local zip size differs from remote; verify $LOCAL_ZIP"
 fi
 
-step "Uploading backup to R2 …"
+step "Uploading backup to R2 ..."
 R2_OBJECT_KEY="runcloud/${SAFE_APP}/${ZIP_NAME}"
 R2_URL=$("$PROJECT_ROOT/lib/r2-upload.sh" "$LOCAL_ZIP" "$R2_OBJECT_KEY") || die "R2 upload failed"
 
-step "Cleaning up remote temp directory …"
+step "Cleaning up remote temp directory ..."
 # shellcheck disable=SC2086
 remote "rm -rf $(shquote \"$REMOTE_TEMP\")" || warn "could not remove remote temp dir"
 

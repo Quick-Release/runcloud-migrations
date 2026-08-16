@@ -2,7 +2,7 @@
 #
 # migrate.sh
 # ----------------------------------------------------------------------------
-# End-to-end migration for a single site: RunCloud backup → Ploi restore.
+# End-to-end migration for a single site: RunCloud backup -> Ploi restore.
 # Wraps runcloud-wp-backup.sh and ploi-migrate.sh with status tracking and
 # a single point of control.
 #
@@ -53,12 +53,12 @@ SITE_KEY="${RC_USER}@${RC_IP}/${DOMAIN:-auto}"
 
 step "End-to-end migration: $SITE_KEY"
 
-# ── 1) backup ───────────────────────────────────────────────────────────────
+# -- 1) backup ---------------------------------------------------------------
 update_status "$SITE_KEY" "backed_up" "running" ""
 child_env=( RC_USER="$RC_USER" RC_IP="$RC_IP" BATCH=1 )
 [ -n "$DOMAIN" ] && child_env+=( DOMAIN="$DOMAIN" )
 
-step "Phase 1/2 — RunCloud backup"
+step "Phase 1/2 - RunCloud backup"
 out=$( env "${child_env[@]}" bash "$BACKUP" </dev/null 2>&1 ) || {
   update_status "$SITE_KEY" "backed_up" "fail" "exit=$?"
   printf '%s\n' "$out"
@@ -72,8 +72,8 @@ zip_path="$(strip_ansi "$zip_path")"
 log "Backup produced: $zip_path"
 update_status "$SITE_KEY" "backed_up" "ok" "zip=$zip_path"
 
-# ── 2) Ploi restore ─────────────────────────────────────────────────────────
-step "Phase 2/2 — Ploi restore"
+# -- 2) Ploi restore ---------------------------------------------------------
+step "Phase 2/2 - Ploi restore"
 update_status "$SITE_KEY" "restored" "running" ""
 if env DOMAIN="$DOMAIN" MIGRATION_KEY="$SITE_KEY" BATCH=1 bash "$RESTORE" "$zip_path" </dev/null 2>&1; then
   update_status "$SITE_KEY" "restored" "ok" ""

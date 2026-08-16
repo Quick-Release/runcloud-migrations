@@ -48,7 +48,7 @@ PLOI_SOURCE_WEB_DIRECTORY="${PLOI_SOURCE_WEB_DIRECTORY:-/public}"
 # ensure source server id
 ploi_ensure_source_server_id
 
-step "Connecting to source Ploi server $(ploi_source_ssh_host):$PLOI_SOURCE_SSH_PORT …"
+step "Connecting to source Ploi server $(ploi_source_ssh_host):$PLOI_SOURCE_SSH_PORT ..."
 # shellcheck disable=SC2016
 conn=$(ploi_source_remote 'printf "ok %s@%s" "$(whoami)" "$(hostname)"' 2>&1) || \
   die "SSH connection failed: $conn"
@@ -57,7 +57,7 @@ case "$conn" in
   *)     die "SSH connection failed: $conn" ;;
 esac
 
-step "Listing sites via Ploi API …"
+step "Listing sites via Ploi API ..."
 sites_json=$(ploi_curl GET "/servers/${PLOI_SOURCE_SERVER_ID}/sites") || die "failed to list sites"
 count=$(printf '%s' "$sites_json" | jq '.data | length')
 if [ "$count" -eq 0 ]; then

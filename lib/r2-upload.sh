@@ -15,9 +15,9 @@
 #   R2_BUCKET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 #
 # Optional env:
-#   R2_PUBLIC_DOMAIN   — if set, return https://<domain>/<key> instead of a
+#   R2_PUBLIC_DOMAIN   - if set, return https://<domain>/<key> instead of a
 #                        presigned URL (the bucket must be publicly readable).
-#   R2_URL_TTL_SECONDS — presigned URL lifetime; default 2592000 (30 days).
+#   R2_URL_TTL_SECONDS - presigned URL lifetime; default 2592000 (30 days).
 # ----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -41,7 +41,7 @@ OBJECT_KEY="$2"
 TTL_SECONDS="${R2_URL_TTL_SECONDS:-2592000}"
 R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
-step "Uploading $(basename "$LOCAL_FILE") to R2 bucket $R2_BUCKET …"
+step "Uploading $(basename "$LOCAL_FILE") to R2 bucket $R2_BUCKET ..."
 
 # Prefer rclone when available; configure it purely through env vars so no
 # persistent config file is required.

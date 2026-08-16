@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Interactive migration CLI for RunCloud → Ploi and Ploi → Ploi.
+Interactive migration CLI for RunCloud -> Ploi and Ploi -> Ploi.
 
 Walks through migrating one WordPress site end-to-end:
-  source server  →  local backup  →  target Ploi server.
+  source server  ->  local backup  ->  target Ploi server.
 
 It prompts only for values not already set in .env or the environment, runs
 bash scripts underneath, and updates .env with the values you enter.
@@ -90,7 +90,7 @@ def check_cloudflare_dns(domain, token, api_url):
 
 def run(cmd, env=None, cwd=None, check=True):
     """Run a shell command, streaming output to the terminal."""
-    print(f"\n  → {cmd}\n")
+    print(f"\n  -> {cmd}\n")
     result = subprocess.run(cmd, shell=True, cwd=cwd, env=env)
     if check and result.returncode != 0:
         raise RuntimeError(f"Command failed with exit code {result.returncode}")
@@ -105,7 +105,7 @@ def check_tools():
         if check.returncode != 0:
             missing.append(tool)
     if missing:
-        print(f"✖ Missing required tools: {', '.join(missing)}")
+        print(f"[ERR] Missing required tools: {', '.join(missing)}")
         sys.exit(1)
 
 
@@ -121,7 +121,7 @@ def ploi_get_servers(token, api_url):
             return data.get("data", [])
     except HTTPError as e:
         body = e.read().decode()
-        print(f"✖ Ploi API error: {e.code} {body}")
+        print(f"[ERR] Ploi API error: {e.code} {body}")
         return []
 
 
@@ -137,7 +137,7 @@ def ploi_pick_server(token, api_url, label):
     try:
         return str(servers[int(choice) - 1]["id"])
     except (ValueError, IndexError):
-        print("✖ Invalid server selection")
+        print("[ERR] Invalid server selection")
         sys.exit(1)
 
 
@@ -216,13 +216,13 @@ def run_dns_check(domain, cf_token, cf_url):
     if not cf_token or not domain:
         return True, "skipped"
     hosted, editable, msg = check_cloudflare_dns(domain, cf_token, cf_url)
-    print(f"  {'✔' if hosted else '✖'} Cloudflare: {msg}")
+    print(f"  {'[OK]' if hosted else '[ERR]'} Cloudflare: {msg}")
     if hosted and editable:
-        print("  → DNS is managed on Cloudflare and the token can edit records.")
+        print("  -> DNS is managed on Cloudflare and the token can edit records.")
     elif hosted:
-        print("  ⚠ DNS is on Cloudflare but edit rights could not be confirmed.")
+        print("  [WARN] DNS is on Cloudflare but edit rights could not be confirmed.")
     else:
-        print("  → Domain not on Cloudflare (or token has no access). Update DNS manually.")
+        print("  -> Domain not on Cloudflare (or token has no access). Update DNS manually.")
     if not hosted or not editable:
         if not confirm("Continue migration anyway?", default=False):
             print("  Aborted. Fix DNS access and rerun.")
@@ -296,7 +296,7 @@ def main():
         sys.exit(0)
 
     print("=" * 55)
-    print("  Migration CLI  —  RunCloud → Ploi  |  Ploi → Ploi")
+    print("  Migration CLI  -  RunCloud -> Ploi  |  Ploi -> Ploi")
     print("=" * 55)
 
     check_tools()
@@ -304,23 +304,23 @@ def main():
     if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
         if confirm(".env not found. Create it from .env.example?", default=True):
             ENV_FILE.write_text(ENV_EXAMPLE.read_text())
-            print(f"  ✔ Created {ENV_FILE}")
+            print(f"  [OK] Created {ENV_FILE}")
 
     env = load_dotenv(ENV_FILE)
     env_updates = {}
 
-    # ── Source type ─────────────────────────────────────────────────────────
+    # -- Source type ---------------------------------------------------------
     print("\n--- Choose source type ---")
     source_type = prompt("Source type (runcloud / ploi)", env.get("MIGRATION_SOURCE_TYPE") or "runcloud", required=True).lower()
     if source_type not in ("runcloud", "ploi"):
-        print("✖ Source type must be 'runcloud' or 'ploi'")
+        print("[ERR] Source type must be 'runcloud' or 'ploi'")
         sys.exit(1)
     env_updates["MIGRATION_SOURCE_TYPE"] = source_type
 
     domain = ""
 
     if source_type == "runcloud":
-        # ── RunCloud source ─────────────────────────────────────────────────
+        # -- RunCloud source -------------------------------------------------
         print("\n--- Step 1/5: RunCloud source server ---")
         rc_user = prompt("RunCloud SSH username", env.get("RC_USER"), required=True)
         rc_ip = prompt("RunCloud server IP", env.get("RC_IP"), required=True)
@@ -353,14 +353,14 @@ def main():
                         picked = sites[idx]
                         domain = picked["domain"]
                         env_updates["DOMAIN"] = domain
-                        print(f"\n  → Selected: {domain} (WP {picked['wp_version']}, PHP {picked['php_version']})")
+                        print(f"\n  -> Selected: {domain} (WP {picked['wp_version']}, PHP {picked['php_version']})")
                 except ValueError:
                     pass
             else:
                 print("  ! No discovery results found; continuing with provided/empty domain.")
 
     else:
-        # ── Ploi source ───────────────────────────────────────────────────────
+        # -- Ploi source -------------------------------------------------------
         print("\n--- Step 1/5: Ploi source server ---")
         source_token = prompt("Ploi API token", env.get("PLOI_API_TOKEN"), secret=True, required=True)
         source_url = prompt("Ploi API URL", env.get("PLOI_API_URL") or "https://ploi.io/api", required=True)
@@ -408,7 +408,7 @@ def main():
                     picked = sites[idx]
                     system_user = picked["system_user"]
                     domain = picked["domain"]
-                    print(f"\n  → Selected: {domain} (user={system_user})")
+                    print(f"\n  -> Selected: {domain} (user={system_user})")
             except ValueError:
                 pass
 
@@ -416,7 +416,7 @@ def main():
             system_user = prompt("Source Ploi system user", required=True)
             domain = prompt("Domain to migrate", required=True)
 
-    # ── DNS check ─────────────────────────────────────────────────────────────
+    # -- DNS check -------------------------------------------------------------
     print("\n--- Step 3/5: DNS hosting check ---")
     cf_token = prompt("Cloudflare API token (optional; for DNS check)", env.get("CLOUDFLARE_API_TOKEN"), secret=True)
     if cf_token:
@@ -426,7 +426,7 @@ def main():
     else:
         print("  ! No Cloudflare token provided. DNS hosting check skipped.")
 
-    # ── Target Ploi ───────────────────────────────────────────────────────────
+    # -- Target Ploi -----------------------------------------------------------
     default_ssh_key = env.get("SSH_KEY") or str(Path.home() / ".ssh/id_ed25519")
     if source_type == "ploi":
         default_ssh_key = env_updates.get("PLOI_SOURCE_SSH_KEY") or default_ssh_key
@@ -435,9 +435,9 @@ def main():
     # Persist everything to .env
     env.update(env_updates)
     save_dotenv(ENV_FILE, env)
-    print(f"\n  ✔ Saved settings to {ENV_FILE}")
+    print(f"\n  [OK] Saved settings to {ENV_FILE}")
 
-    # ── Migrate ───────────────────────────────────────────────────────────────
+    # -- Migrate ---------------------------------------------------------------
     print("\n--- Step 5/5: Migrate ---")
     if not confirm("Run backup from source?", default=True):
         print("  Aborted. You can rerun the CLI later; your answers are saved in .env.")
@@ -447,20 +447,20 @@ def main():
         try:
             run_runcloud_backup(rc_user, rc_ip, ssh_key, domain)
         except RuntimeError:
-            print("\n✖ Backup failed. Fix the issue and rerun the CLI.")
+            print("\n[ERR] Backup failed. Fix the issue and rerun the CLI.")
             sys.exit(1)
     else:
         try:
             run_ploi_backup(system_user, domain)
         except RuntimeError:
-            print("\n✖ Backup failed. Fix the issue and rerun the CLI.")
+            print("\n[ERR] Backup failed. Fix the issue and rerun the CLI.")
             sys.exit(1)
 
     zip_file = find_latest_zip(domain)
     if not zip_file:
-        print("\n✖ Backup script succeeded but no zip was found in ./downloads")
+        print("\n[ERR] Backup script succeeded but no zip was found in ./downloads")
         sys.exit(1)
-    print(f"\n  ✔ Backup zip: {zip_file}")
+    print(f"\n  [OK] Backup zip: {zip_file}")
 
     if not confirm("Restore this backup to the target Ploi server?", default=True):
         print(f"\n  Backup is ready: {zip_file}")
@@ -480,11 +480,11 @@ def main():
     try:
         run_ploi_restore(domain, zip_file, target_env)
     except RuntimeError:
-        print("\n✖ Ploi restore failed. Check the output above and retry.")
+        print("\n[ERR] Ploi restore failed. Check the output above and retry.")
         sys.exit(1)
 
     print("\n" + "=" * 55)
-    print("  ✔ Migration complete")
+    print("  [OK] Migration complete")
     print("=" * 55)
     print(f"  Site:    https://{domain}")
     print(f"  Backup:  {zip_file}")
