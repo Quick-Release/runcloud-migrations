@@ -55,7 +55,7 @@ case "$conn" in
 esac
 
 step "Listing sites via Ploi API …"
-sites_json=$(ploi_source_curl GET "/servers/${PLOI_SOURCE_SERVER_ID}/sites") || die "failed to list sites"
+sites_json=$(ploi_curl GET "/servers/${PLOI_SOURCE_SERVER_ID}/sites") || die "failed to list sites"
 count=$(printf '%s' "$sites_json" | jq '.data | length')
 if [ "$count" -eq 0 ]; then
   die "no sites found on source server ${PLOI_SOURCE_SERVER_ID}"

@@ -316,24 +316,8 @@ ssh_public_key_for() {
 }
 
 # -- Ploi source helpers (Ploi -> Ploi migrations) ----------------------------
-# Source server API - uses the shared PLOI_API_TOKEN / PLOI_API_URL.
-ploi_source_curl() {
-  local method="$1" path="$2"; shift 2
-  [ -n "${PLOI_API_TOKEN:-}" ] || die "PLOI_API_TOKEN is not set"
-  [ -n "${PLOI_API_URL:-}" ] || die "PLOI_API_URL is not set"
-  local url
-  case "$path" in
-    http*) url="$path" ;;
-    *)     url="${PLOI_API_URL%/}/${path#/}" ;;
-  esac
-  local fail_flag='--fail'
-  curl --help | grep -q -- '--fail-with-body' && fail_flag='--fail-with-body'
-  curl -sSL "$fail_flag" -X "$method" \
-    -H "Authorization: Bearer ${PLOI_API_TOKEN}" \
-    -H "Accept: application/json" \
-    -H "Content-Type: application/json" \
-    "$@" "$url"
-}
+# The API layer is shared with the target (see ploi_curl above); only the SSH
+# adapter below is source-specific (different server, different keys).
 
 # ploi_ensure_source_server_id - prompt to pick a source server if not set.
 ploi_ensure_source_server_id() {
@@ -341,7 +325,7 @@ ploi_ensure_source_server_id() {
   command -v jq >/dev/null 2>&1 || die "jq is required to list Ploi servers"
   step "PLOI_SOURCE_SERVER_ID not set; fetching your source Ploi servers ..."
   local json
-  json=$(ploi_source_curl GET /servers) || die "failed to list source Ploi servers"
+  json=$(ploi_curl GET /servers) || die "failed to list source Ploi servers"
   local count
   count=$(printf '%s' "$json" | jq '.data | length')
   if [ "$count" -eq 0 ]; then
@@ -392,9 +376,3 @@ ploi_source_remote() {
   ssh "${PLOI_SOURCE_SSH_OPTS[@]}" "$(ploi_source_ssh_host)" "$1"
 }
 
-# ploi_source_scp <source> <dest> - scp as the source privileged admin user.
-ploi_source_scp() {
-  ploi_source_ssh_opts
-  scp -P "${PLOI_SOURCE_SSH_PORT:-22}" -i "${PLOI_SOURCE_SSH_KEY:-$HOME/.ssh/id_ed25519}" \
-    -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$@"
-}

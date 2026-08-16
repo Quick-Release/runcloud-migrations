@@ -65,7 +65,7 @@ if [ -z "$PLOI_SOURCE_SITE_ROOT" ] && [ -n "$PLOI_API_TOKEN" ]; then
   ploi_ensure_source_server_id >/dev/null 2>&1 || true
   if [ -n "${PLOI_SOURCE_SERVER_ID:-}" ]; then
     step "Looking up site root via Ploi API …"
-    site_json=$(ploi_source_curl GET "/servers/${PLOI_SOURCE_SERVER_ID}/sites" 2>/dev/null) || true
+    site_json=$(ploi_curl GET "/servers/${PLOI_SOURCE_SERVER_ID}/sites" 2>/dev/null) || true
     if [ -n "${site_json:-}" ]; then
       found_root=$(printf '%s' "$site_json" | jq -r --arg d "$DOMAIN" '.data[] | select(.domain == $d) | .root_directory // empty' 2>/dev/null) || true
       [ -n "$found_root" ] && PLOI_SOURCE_SITE_ROOT="$found_root"
