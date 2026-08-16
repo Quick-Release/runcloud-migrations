@@ -21,10 +21,6 @@
 # derived from it but the directories are NOT created here.
 # ============================================================================
 
-# guard against being sourced twice in the same shell
-[ -n "${_PI_COMMON_LOADED:-}" ] && return 0
-_PI_COMMON_LOADED=1
-
 # project root = parent of this lib/ directory (works from any cwd)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

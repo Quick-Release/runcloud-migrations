@@ -26,30 +26,33 @@ warn() { printf '%s!%s  %s\n' "$C_Y" "$C_0" "$*" >&2; }
 die()  { printf '%s[ERR]%s %s\n' "$C_R" "$C_0" "$*" >&2; exit 1; }
 step() { printf '%s->%s %s\n' "$C_B" "$C_0" "$*" >&2; }
 
-# prompt with optional default; under BATCH=1, returns the default silently
-ask() { # ask "Prompt" [default]
-  local prompt="$1" default="${2:-}" reply
+# prompt with optional default; under BATCH=1, returns the default silently.
+# ask_in takes optional input/output fds: ask_in "Prompt" [default] [in_fd] [out_fd]
+ask_in() {
+  local prompt="$1" default="${2:-}" reply in_fd="${3:-0}" out_fd="${4:-2}"
   if [ "${BATCH:-0}" = "1" ]; then printf '%s' "$default"; return; fi
   if [ -n "$default" ]; then
-    printf '%s [%s]: ' "$prompt" "$default" >&2
+    printf '%s [%s]: ' "$prompt" "$default" >&"$out_fd"
   else
-    printf '%s: ' "$prompt" >&2
+    printf '%s: ' "$prompt" >&"$out_fd"
   fi
-  read -r reply || true
+  read -r reply <&"$in_fd" || true
   printf '%s' "${reply:-$default}"
 }
+ask() { ask_in "$@"; }
 
-# yes/no prompt; under BATCH=1, returns the default (0=yes when default is y)
-ask_yn() { # ask_yn "Prompt" [default y|n]  -> returns 0=yes 1=no
-  local prompt="$1" default="${2:-n}" reply
+# yes/no prompt; under BATCH=1, returns the default (0=yes when default is y).
+# ask_yn_in takes optional input/output fds.
+ask_yn_in() {
+  local prompt="$1" default="${2:-n}" reply in_fd="${3:-0}" out_fd="${4:-2}"
   if [ "${BATCH:-0}" = "1" ]; then [ "$default" = "y" ] && return 0 || return 1; fi
   while true; do
     if [ "$default" = "y" ]; then
-      printf '%s [Y/n]: ' "$prompt" >&2
+      printf '%s [Y/n]: ' "$prompt" >&"$out_fd"
     else
-      printf '%s [y/N]: ' "$prompt" >&2
+      printf '%s [y/N]: ' "$prompt" >&"$out_fd"
     fi
-    read -r reply || true
+    read -r reply <&"$in_fd" || true
     reply="${reply:-$default}"
     case "${reply,,}" in
       y|yes) return 0 ;;
@@ -57,3 +60,4 @@ ask_yn() { # ask_yn "Prompt" [default y|n]  -> returns 0=yes 1=no
     esac
   done
 }
+ask_yn() { ask_yn_in "$@"; }
