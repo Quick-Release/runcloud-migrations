@@ -7,6 +7,12 @@ Provides:
   - prompt(msg, default, ...)     - interactive prompt with optional default
   - confirm(msg, default=True)    - y/n prompt, returns bool
 
+BATCH=1 contract:
+  - prompt() returns its default silently when the environment variable
+    BATCH is set to "1".
+  - confirm() returns its default bool silently under BATCH=1.
+  This matches the shell helpers ask() / ask_yn() in lib/output.sh.
+
 Usage from a top-level CLI:
 
     import sys
@@ -87,8 +93,12 @@ def prompt(msg, default=None, secret=False, required=False):
     """Interactive prompt with optional default. Reads from stdin.
 
     Under BATCH=1 this returns the default silently - the CLI dispatch
-    scripts set BATCH=1 to skip prompts entirely.
+    scripts set BATCH=1 to skip prompts entirely. If required=True and
+    no default is provided, an empty string is returned; callers running
+    under BATCH should pre-populate the corresponding env variable.
     """
+    if os.environ.get("BATCH") == "1":
+        return default or ""
     display_default = "*****" if (secret and default) else default
     if default:
         raw = input(f"{msg} [{display_default}]: ").strip()
@@ -101,7 +111,12 @@ def prompt(msg, default=None, secret=False, required=False):
 
 
 def confirm(msg, default=True):
-    """Y/n prompt; loops until the user answers yes or no. Returns bool."""
+    """Y/n prompt; loops until the user answers yes or no. Returns bool.
+
+    Under BATCH=1 this returns default silently.
+    """
+    if os.environ.get("BATCH") == "1":
+        return default
     hint = "Y/n" if default else "y/N"
     while True:
         reply = input(f"{msg} [{hint}]: ").strip().lower()

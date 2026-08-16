@@ -10,8 +10,13 @@
 #   ask  "Prompt" [default]   - prompt to stderr, read reply, echo to stdout
 #   ask_yn "Prompt" [y|n]     - yes/no loop; returns 0=yes 1=no
 #
-# ask and ask_yn honour BATCH=1 by silently returning the default. Callers
-# run with BATCH=1 to make prompts fully non-interactive.
+# BATCH=1 contract:
+#   ask() / ask_in() return their default silently when the environment
+#   variable BATCH is set to "1".
+#   ask_yn() / ask_yn_in() return their default bool silently under BATCH=1.
+#   This matches prompt() / confirm() in lib/cli_common.py.
+#
+# Callers run with BATCH=1 to make prompts fully non-interactive.
 
 # -- pretty output -----------------------------------------------------------
 if [ -t 2 ]; then
