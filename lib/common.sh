@@ -57,17 +57,18 @@ load_env() {
   done < "$f"
 }
 
-# load config first, so path defaults below can be overridden by .env
-load_env "$PROJECT_ROOT/.env"
+# load_env and directory creation are NOT auto-invoked here - dispatch
+# scripts must call them explicitly after sourcing this file. See
+# IMPROVEMENTS.md ticket T3 for the rationale.
 
 # -- paths (overridable via .env / environment) ------------------------------
 DOWNLOADS_DIR="${DOWNLOADS_DIR:-$PROJECT_ROOT/downloads}"
 CONFIG_DIR="${CONFIG_DIR:-$PROJECT_ROOT/config}"
 LOGS_DIR="${LOGS_DIR:-$PROJECT_ROOT/logs}"
+# SERVERS_DIR is set here for callers; shellcheck sees it as unused.
+# shellcheck disable=SC2034
 SERVERS_DIR="$CONFIG_DIR/servers"
 STATUS_FILE="${STATUS_FILE:-$CONFIG_DIR/status.tsv}"
-mkdir -p "$DOWNLOADS_DIR" "$CONFIG_DIR" "$LOGS_DIR" "$SERVERS_DIR" "$(dirname "$STATUS_FILE")"
-
 # -- pretty output -----------------------------------------------------------
 if [ -t 2 ]; then
   C_G=$'\033[1;32m'; C_Y=$'\033[1;33m'; C_R=$'\033[1;31m'

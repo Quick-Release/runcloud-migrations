@@ -32,6 +32,9 @@ fi
 
 # shellcheck source=lib/common.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
+load_env "$PROJECT_ROOT/.env"
+mkdir -p "$DOWNLOADS_DIR" "$CONFIG_DIR" "$LOGS_DIR" "$SERVERS_DIR" "$(dirname "$STATUS_FILE")"
+
 
 for bin in ssh scp zip unzip; do
   command -v "$bin" >/dev/null 2>&1 || die "missing required local tool: $bin"

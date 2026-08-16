@@ -25,6 +25,9 @@ set -uo pipefail
 
 # shellcheck source=lib/common.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
+load_env "$PROJECT_ROOT/.env"
+mkdir -p "$DOWNLOADS_DIR" "$CONFIG_DIR" "$LOGS_DIR" "$SERVERS_DIR" "$(dirname "$STATUS_FILE")"
+
 
 RESTORE="$PROJECT_ROOT/ploi-migrate.sh"
 CSV="${PLOI_CSV:-${CSV:-$PROJECT_ROOT/ploi-zips.csv}}"

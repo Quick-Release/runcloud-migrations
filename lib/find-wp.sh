@@ -21,6 +21,9 @@ set -uo pipefail
 
 # shellcheck source=lib/common.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+load_env "$PROJECT_ROOT/.env"
+mkdir -p "$DOWNLOADS_DIR" "$CONFIG_DIR" "$LOGS_DIR" "$SERVERS_DIR" "$(dirname "$STATUS_FILE")"
+
 
 SSH_HOST="${SSH_HOST:-}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
