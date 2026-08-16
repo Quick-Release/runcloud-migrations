@@ -1,6 +1,12 @@
 # clients.csv  —  one site per line:  user,ip[,domain]
-# Lines starting with # and blank lines are ignored.
-# A header row whose first column is "user" or "username" is auto-skipped.
+#
+# Conventions used by all batch CSVs in this toolkit:
+#   - Lines starting with # are treated as comments and ignored.
+#   - Blank lines are ignored.
+#   - A header row whose first column matches a known header word is
+#     auto-skipped. Known headers for this file: user, username.
+#   - Fields may have surrounding whitespace; it is trimmed.
+#
 # domain is OPTIONAL: leave it out and the script auto-detects it on the server.
 # Tip: if one server hosts several sites, list each on its own line WITH its domain.
 #

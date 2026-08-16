@@ -64,13 +64,9 @@ printf '=== ploi batch run %s | csv=%s dry=%s limit=%s ===\n' \
 n_total=0; n_ok=0; n_fail=0; n_plan=0
 results=()
 
-while IFS=',' read -r rawdomain rawzip _more || [ -n "${rawdomain:-}" ]; do
-  domain="$(trim "$rawdomain")"
-  zip="$(trim "$rawzip")"
-
+# CSV normalized by lib/csv.sh: comments, blank lines, and header rows removed.
+while IFS=$'\t' read -r domain zip || [ -n "${domain:-}" ]; do
   [ -z "$domain" ] && continue
-  [[ "$domain" == \#* ]] && continue
-  [[ "${domain,,}" == domain ]] && continue
 
   if [ "$LIMIT" -gt 0 ] && [ "$n_total" -ge "$LIMIT" ]; then break; fi
   n_total=$((n_total + 1))
@@ -104,7 +100,7 @@ while IFS=',' read -r rawdomain rawzip _more || [ -n "${rawdomain:-}" ]; do
     n_fail=$((n_fail + 1))
     printf '%s✖ site failed (exit %s) — continuing%s\n' "$C_R" "$rc" "$C_0"
   fi
-done < "$CSV"
+done < <(read_batch_csv "$CSV" domain)
 
 echo
 echo "=== results ==="

@@ -3,6 +3,7 @@
 # lib/common.sh - loader for shared helpers used across the runcloud->ploi
 # toolkit. Sourcing this file pulls in:
 #
+#   lib/csv.sh     - simple positional CSV normalizer for batch scripts
 #   lib/env.sh      - .env loader (_trim, load_env, trim)
 #   lib/output.sh   - terminal output + interactive prompts (log/warn/die/step,
 #                     ask/ask_yn, ANSI colors)
@@ -34,6 +35,8 @@ SERVERS_DIR="$CONFIG_DIR/servers"
 STATUS_FILE="${STATUS_FILE:-$CONFIG_DIR/status.tsv}"
 
 # -- load the sub-modules ----------------------------------------------------
+# shellcheck source=lib/csv.sh
+. "$(dirname "${BASH_SOURCE[0]}")/csv.sh"
 # shellcheck source=lib/env.sh
 . "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 # shellcheck source=lib/output.sh

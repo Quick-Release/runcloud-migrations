@@ -1,6 +1,11 @@
 # clients-ploi.csv  —  one site per line:  system_user,domain
-# Lines starting with # and blank lines are ignored.
-# A header row whose first column is "system_user" or "user" is auto-skipped.
+#
+# Conventions used by all batch CSVs in this toolkit:
+#   - Lines starting with # are treated as comments and ignored.
+#   - Blank lines are ignored.
+#   - A header row whose first column matches a known header word is
+#     auto-skipped. Known headers for this file: system_user, user.
+#   - Fields may have surrounding whitespace; it is trimmed.
 #
 # system_user,domain
 example,example.com

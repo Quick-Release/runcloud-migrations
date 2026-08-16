@@ -1,6 +1,12 @@
-# ploi-zips.csv — one site per line: domain,zip_path
-# Header row whose first column is "domain" is auto-skipped.
-# zip_path can be absolute or relative to the project root.
+# ploi-zips.csv  —  one site per line:  domain,zip_path
+#
+# Conventions used by all batch CSVs in this toolkit:
+#   - Lines starting with # are treated as comments and ignored.
+#   - Blank lines are ignored.
+#   - A header row whose first column matches a known header word is
+#     auto-skipped. Known header for this file: domain.
+#   - Fields may have surrounding whitespace; it is trimmed.
+#   - zip_path can be absolute or relative to the project root.
 #
 # domain,zip_path
 example.com,downloads/example.com_20240115-143000.zip

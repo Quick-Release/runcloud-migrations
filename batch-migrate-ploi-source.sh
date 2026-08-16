@@ -91,13 +91,9 @@ printf '=== ploi-source batch run %s | csv=%s force=%s dry=%s limit=%s retry-fai
 n_total=0; n_ok=0; n_fail=0; n_skip=0; n_bad=0; n_plan=0
 results=()
 
-while IFS=',' read -r rawuser rawdomain _more || [ -n "${rawuser:-}" ]; do
-  user="$(trim "$rawuser")"
-  domain="$(trim "$rawdomain")"
-
+# CSV normalized by lib/csv.sh: comments, blank lines, and header rows removed.
+while IFS=$'\t' read -r user domain || [ -n "${user:-}" ]; do
   [ -z "$user" ] && continue
-  [[ "$user" == \#* ]] && continue
-  [[ "${user,,}" == user || "${user,,}" == system_user ]] && continue
 
   if [ "$LIMIT" -gt 0 ] && [ "$n_total" -ge "$LIMIT" ]; then break; fi
   n_total=$((n_total + 1))
@@ -152,7 +148,7 @@ while IFS=',' read -r rawuser rawdomain _more || [ -n "${rawuser:-}" ]; do
     n_fail=$((n_fail + 1))
     printf '%s✖ site failed (exit %s) — continuing%s\n' "$C_R" "$rc" "$C_0"
   fi
-done < "$CSV"
+done < <(read_batch_csv "$CSV" user system_user)
 
 echo
 echo "=== results ==="

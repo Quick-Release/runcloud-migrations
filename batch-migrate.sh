@@ -109,16 +109,10 @@ n_total=0; n_ok=0; n_fail=0; n_skip=0; n_bad=0; n_plan=0
 results=()
 
 # ── main loop (runs in this shell; child reads /dev/null, not the CSV) ──────
-while IFS=',' read -r rawuser rawip rawdomain _more || [ -n "${rawuser:-}" ]; do
-  user="$(trim "$rawuser")"
-  ip="$(trim "$rawip")"
-  domain="$(trim "$rawdomain")"
-
-  # blank / comment
+# CSV normalized by lib/csv.sh: comments, blank lines, and header rows removed;
+# fields are tab-separated and trimmed.
+while IFS=$'\t' read -r user ip domain || [ -n "${user:-}" ]; do
   [ -z "$user" ] && continue
-  [[ "$user" == \#* ]] && continue
-  # header row
-  [[ "${user,,}" == user || "${user,,}" == username ]] && continue
 
   # --limit
   if [ "$LIMIT" -gt 0 ] && [ "$n_total" -ge "$LIMIT" ]; then break; fi
@@ -183,7 +177,7 @@ while IFS=',' read -r rawuser rawip rawdomain _more || [ -n "${rawuser:-}" ]; do
     n_fail=$((n_fail + 1))
     printf '%s✖ site failed (exit %s) — continuing%s\n' "$C_R" "$rc" "$C_0"
   fi
-done < "$CSV"
+done < <(read_batch_csv "$CSV" user username)
 
 # ── summary ─────────────────────────────────────────────────────────────────
 echo
