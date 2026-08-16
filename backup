@@ -1,0 +1,454 @@
+#!/usr/bin/env python3
+"""
+Unified backup CLI.
+
+Usage:
+  backup runcloud
+
+Interactively prompts for RunCloud server details, backs up the application
+(files + database if WordPress), uploads the .zip to Cloudflare R2, and writes
+a markdown report with download links.
+"""
+
+import os
+import sys
+import json
+import shlex
+import subprocess
+import argparse
+from pathlib import Path
+from datetime import datetime, timedelta
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+
+ROOT = Path(__file__).resolve().parent
+ENV_FILE = ROOT / ".env"
+ENV_EXAMPLE = ROOT / ".env.example"
+
+
+def expand_path(value):
+    if value and value.startswith("~"):
+        value = str(Path.home()) + value[1:]
+    return value
+
+
+def load_dotenv(path):
+    env = {}
+    if not path.exists():
+        return env
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        val = val.strip().strip('"').strip("'")
+        env[key.strip()] = expand_path(val)
+    return env
+
+
+def save_dotenv(path, env):
+    existing_lines = []
+    if path.exists():
+        for raw_line in path.read_text().splitlines():
+            line = raw_line.strip()
+            if line.startswith("#") or "=" not in line:
+                existing_lines.append(raw_line)
+                continue
+            key = line.split("=", 1)[0].strip()
+            if key in env:
+                v = env[key]
+                v = v.strip().strip('"').strip("'")
+                if " " in v or "#" in v:
+                    v = f'"{v}"'
+                existing_lines.append(f"{key}={v}")
+                del env[key]
+            else:
+                existing_lines.append(raw_line)
+    if env:
+        existing_lines.append("")
+        for key, v in sorted(env.items()):
+            v = v.strip().strip('"').strip("'")
+            if " " in v or "#" in v:
+                v = f'"{v}"'
+            existing_lines.append(f"{key}={v}")
+    path.write_text("\n".join(existing_lines) + "\n")
+    os.chmod(path, 0o600)
+
+
+def prompt(msg, default=None, secret=False, required=False):
+    display_default = "*****" if (secret and default) else default
+    suffix = f" [{display_default}]" if default else ""
+    raw = input(f"{msg}{suffix}: ").strip()
+    value = raw if raw else (default or "")
+    while required and not value:
+        value = input(f"{msg} (required): ").strip()
+    return value
+
+
+def confirm(msg, default=True):
+    hint = "Y/n" if default else "y/N"
+    while True:
+        reply = input(f"{msg} [{hint}]: ").strip().lower()
+        if not reply:
+            return default
+        if reply in ("y", "yes"):
+            return True
+        if reply in ("n", "no"):
+            return False
+
+
+def human_bytes(n):
+    n = int(n) if n else 0
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if n < 1024:
+            return f"{n:.2f} {unit}" if isinstance(n, float) else f"{n} {unit}"
+        n /= 1024
+    return f"{n:.2f} PB"
+
+
+def run(cmd, env=None, cwd=None, check=True):
+    print(f"\n  → {cmd}\n")
+    result = subprocess.run(cmd, shell=True, cwd=cwd, env=env)
+    if check and result.returncode != 0:
+        raise RuntimeError(f"Command failed with exit code {result.returncode}")
+    return result
+
+
+def run_capture(cmd, env=None, cwd=None):
+    result = subprocess.run(cmd, shell=True, cwd=cwd, env=env, capture_output=True, text=True)
+    return result.returncode, result.stdout, result.stderr
+
+
+def check_tools():
+    needed = ["bash", "ssh", "scp", "ssh-keygen", "zip", "unzip"]
+    missing = []
+    for tool in needed:
+        check = subprocess.run(["bash", "-c", f"command -v {tool}"], capture_output=True)
+        if check.returncode != 0:
+            missing.append(tool)
+    if missing:
+        print(f"✖ Missing required tools: {', '.join(missing)}")
+        sys.exit(1)
+    # rclone or aws is needed for R2 upload
+    for r2_tool in ["rclone", "aws"]:
+        check = subprocess.run(["bash", "-c", f"command -v {r2_tool}"], capture_output=True)
+        if check.returncode == 0:
+            return
+    print("✖ Missing an R2 upload tool: install rclone (https://rclone.org) or the AWS CLI v2.")
+    sys.exit(1)
+
+
+def send_email_via_cloudflare(account_id, token, to, from_address, from_name, subject, text, html=None):
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/email/sending/send"
+    payload = {
+        "to": to,
+        "from": {"address": from_address, "name": from_name},
+        "subject": subject,
+        "text": text,
+    }
+    if html:
+        payload["html"] = html
+    data = json.dumps(payload).encode()
+    req = Request(url, data=data, headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    })
+    try:
+        with urlopen(req) as resp:
+            return True, json.loads(resp.read().decode())
+    except HTTPError as e:
+        body = e.read().decode()
+        try:
+            return False, json.loads(body)
+        except json.JSONDecodeError:
+            return False, {"message": body}
+
+
+def write_report(metadata, client_email, report_dir):
+    report_dir.mkdir(parents=True, exist_ok=True)
+    app = metadata.get("app_name", "site")
+    ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    report_path = report_dir / f"{app}_backup_{ts}.md"
+
+    size = metadata.get("zip_size_bytes", "")
+    try:
+        size_str = human_bytes(size)
+    except Exception:
+        size_str = size or "unknown"
+
+    expires = metadata.get("expires_at", "")
+    if not expires:
+        expires = (datetime.utcnow() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M UTC")
+
+    lines = [
+        f"# Backup Report — {metadata.get('app_name', app)}",
+        "",
+        f"- **Source**: RunCloud server `{metadata.get('server_ip', '')}` (user: `{metadata.get('ssh_user', '')}`)",
+        f"- **App directory**: `{metadata.get('app_dir', '')}`",
+        f"- **Backup date**: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        f"- **WordPress detected**: {metadata.get('is_wordpress', 'no')}",
+        f"- **Database included**: {metadata.get('db_included', 'no')}",
+        f"- **Backup file size**: {size_str}",
+        "",
+        "## Download",
+        "",
+        "Your backup is available as a single `.zip` file:",
+        "",
+        f"- **File name**: `{metadata.get('zip_name', '')}`",
+        f"- **Download link**: {metadata.get('r2_url', '')}",
+        f"- **Link expires**: {expires}",
+        "",
+        f"This backup will be deleted from our storage after **{expires}** (30 days from now).",
+        "Please download it before then.",
+        "",
+    ]
+
+    if client_email:
+        lines.extend([
+            f"## Ready-to-send email for {client_email}",
+            "",
+            "**Subject**: Your website backup is ready",
+            "",
+            "**Body**:",
+            "",
+            "Hi there,",
+            "",
+            f"We've created a full backup of your website (`{metadata.get('app_name', app)}`).",
+            "",
+            "You can download it here:",
+            "",
+            f"{metadata.get('r2_url', '')}",
+            "",
+            f"The backup includes all site files{' and the database' if metadata.get('db_included') == 'yes' else ''} and is packaged as a .zip file.",
+            "",
+            f"Please note: this download link will expire on {expires} and the backup will be removed from our storage after that date.",
+            "",
+            "Let us know once you've downloaded it safely.",
+            "",
+            "Best regards,",
+            "",
+        ])
+
+    report_path.write_text("\n".join(lines) + "\n")
+    return report_path
+
+
+def parse_backup_output(stdout):
+    data = {}
+    for line in stdout.strip().splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            data[k.strip()] = v.strip()
+    return data
+
+
+def backup_runcloud(env):
+    print("\n--- RunCloud backup ---")
+    ip = prompt("RunCloud server IP or hostname", env.get("RC_IP"), required=True)
+    user = prompt("RunCloud SSH username", env.get("RC_USER") or "runcloud", required=True)
+    app = prompt("RunCloud app name", env.get("RC_APP_NAME"), required=True)
+    client_email = prompt("Client email (optional, for report)", env.get("BACKUP_CLIENT_EMAIL"))
+
+    ssh_key_default = env.get("SSH_KEY") or str(Path.home() / ".ssh/id_ed25519")
+    ssh_key = prompt("SSH private key", ssh_key_default, required=True)
+    ssh_port = prompt("SSH port", env.get("SSH_PORT") or "22", required=True)
+
+    print("\n--- R2 upload credentials ---")
+    r2_bucket = prompt("R2 bucket name", env.get("R2_BUCKET"), required=True)
+    r2_account = prompt("R2 account ID", env.get("R2_ACCOUNT_ID"), required=True)
+    r2_key_id = prompt("R2 access key ID", env.get("R2_ACCESS_KEY_ID"), required=True)
+    r2_secret = prompt("R2 secret access key", env.get("R2_SECRET_ACCESS_KEY"), secret=True, required=True)
+    r2_public_domain = prompt("R2 public domain (optional, skip for presigned URLs)", env.get("R2_PUBLIC_DOMAIN"))
+
+    child_env = os.environ.copy()
+    child_env.update({
+        "RC_IP": ip,
+        "RC_USER": user,
+        "RC_APP_NAME": app,
+        "SSH_KEY": ssh_key,
+        "SSH_PORT": ssh_port,
+        "R2_BUCKET": r2_bucket,
+        "R2_ACCOUNT_ID": r2_account,
+        "R2_ACCESS_KEY_ID": r2_key_id,
+        "R2_SECRET_ACCESS_KEY": r2_secret,
+        "R2_PUBLIC_DOMAIN": r2_public_domain,
+    })
+
+    script = ROOT / "lib" / "backup-runcloud.sh"
+    code, stdout, stderr = run_capture(f"bash {shlex.quote(str(script))}", env=child_env)
+    if code != 0:
+        print(stderr)
+        raise RuntimeError(f"RunCloud backup failed with exit code {code}")
+
+    metadata = parse_backup_output(stdout)
+    if metadata.get("status") != "ok":
+        raise RuntimeError(f"RunCloud backup did not complete: {stdout}\n{stderr}")
+
+    report_dir = ROOT / "reports"
+    report_path = write_report(metadata, client_email, report_dir)
+    print(f"\n  ✔ Backup report written: {report_path}")
+
+    # Optionally send email via Cloudflare Email Service REST API.
+    token = env.get("CLOUDFLARE_API_TOKEN")
+    account_id = env.get("CLOUDFLARE_ACCOUNT_ID")
+    from_address = env.get("EMAIL_FROM")
+    from_name = env.get("EMAIL_FROM_NAME") or "RunCloud Backups"
+    if client_email and token and account_id and from_address:
+        if confirm("Send download email to client now?", default=False):
+            text = (
+                f"Hi there,\n\n"
+                f"We've created a full backup of your website ({app}).\n\n"
+                f"Download link: {metadata.get('r2_url', '')}\n\n"
+                f"This link expires on {metadata.get('expires_at', '')} and the backup will be removed after that date.\n\n"
+                "Let us know once you've downloaded it safely.\n\n"
+                "Best regards,"
+            )
+            html = (
+                f"<p>Hi there,</p>\n"
+                f"<p>We've created a full backup of your website (<strong>{app}</strong>).</p>\n"
+                f"<p><a href=\"{metadata.get('r2_url', '')}\">Download your backup</a></p>\n"
+                f"<p>This link expires on <strong>{metadata.get('expires_at', '')}</strong> and the backup will be removed after that date.</p>\n"
+                "<p>Let us know once you've downloaded it safely.</p>\n"
+                "<p>Best regards,</p>"
+            )
+            ok, result = send_email_via_cloudflare(
+                account_id, token, client_email, from_address, from_name,
+                f"Your backup for {app} is ready", text, html
+            )
+            if ok:
+                print(f"  ✔ Email sent to {client_email}")
+            else:
+                msg = result.get("message", str(result))
+                print(f"  ✖ Email failed: {msg}")
+
+    # Save non-secret defaults back to .env for next time.
+    save_env = {
+        "RC_IP": ip,
+        "RC_USER": user,
+        "SSH_KEY": ssh_key,
+        "SSH_PORT": ssh_port,
+        "R2_BUCKET": r2_bucket,
+        "R2_ACCOUNT_ID": r2_account,
+        "R2_ACCESS_KEY_ID": r2_key_id,
+        "R2_PUBLIC_DOMAIN": r2_public_domain,
+        "BACKUP_CLIENT_EMAIL": client_email,
+        "EMAIL_FROM": from_address,
+        "EMAIL_FROM_NAME": from_name,
+    }
+    # Don't save secrets automatically unless the user explicitly wants to.
+    if confirm("Save R2 secret access key and RunCloud app name to .env?", default=False):
+        save_env.update({
+            "RC_APP_NAME": app,
+            "R2_SECRET_ACCESS_KEY": r2_secret,
+        })
+    save_dotenv(ENV_FILE, save_env)
+    print(f"  ✔ Saved settings to {ENV_FILE}")
+
+    print("\n" + "=" * 60)
+    print("  ✔ Backup complete")
+    print("=" * 60)
+    print(f"  App:        {app}")
+    print(f"  WordPress:  {metadata.get('is_wordpress', 'no')}")
+    print(f"  Database:   {metadata.get('db_included', 'no')}")
+    print(f"  R2 URL:     {metadata.get('r2_url', '')}")
+    print(f"  Report:     {report_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Create downloadable backups of sites and store them in R2")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+def test_r2(env):
+    print("\n--- R2 bucket read/write test ---")
+    print("Checking .env / environment for R2 credentials …")
+
+    r2_bucket = prompt("R2 bucket name", env.get("R2_BUCKET"), required=True)
+    r2_account = prompt("R2 account ID", env.get("R2_ACCOUNT_ID"), required=True)
+    r2_key_id = prompt("R2 access key ID", env.get("R2_ACCESS_KEY_ID"), required=True)
+    r2_secret = prompt("R2 secret access key", env.get("R2_SECRET_ACCESS_KEY"), secret=True, required=True)
+    r2_public_domain = prompt("R2 public domain (optional, skip for presigned URLs)", env.get("R2_PUBLIC_DOMAIN"))
+
+    test_file = f"/tmp/backup-test-{os.getpid()}.txt"
+    Path(test_file).write_text(f"R2 connectivity test from backup CLI\nGenerated at {datetime.utcnow().isoformat()} UTC\n")
+    object_key = f"tests/backup-test-{os.getpid()}.txt"
+
+    child_env = os.environ.copy()
+    child_env.update({
+        "R2_BUCKET": r2_bucket,
+        "R2_ACCOUNT_ID": r2_account,
+        "R2_ACCESS_KEY_ID": r2_key_id,
+        "R2_SECRET_ACCESS_KEY": r2_secret,
+        "R2_PUBLIC_DOMAIN": r2_public_domain,
+        "R2_URL_TTL_SECONDS": "3600",
+    })
+
+    script = ROOT / "lib" / "r2-upload.sh"
+    try:
+        url = subprocess.check_output(
+            ["bash", str(script), test_file, object_key],
+            env=child_env,
+            text=True,
+        ).strip()
+        print(f"\n  ✔ Write succeeded")
+        print(f"  Bucket: {r2_bucket}")
+        print(f"  Key:    {object_key}")
+        print(f"  URL:    {url}")
+
+        # Try to read the object back using curl.
+        read_check = subprocess.run(
+            ["curl", "-fsSL", "-o", "/dev/null", "-w", "%{http_code}", url],
+            capture_output=True,
+            text=True,
+        )
+        if read_check.returncode == 0 and read_check.stdout.strip() == "200":
+            print("  ✔ Read succeeded (HTTP 200)")
+        else:
+            print(f"  ✖ Read check failed: HTTP {read_check.stdout.strip()}")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"R2 upload failed: {e.stderr or e.output or 'unknown error'}")
+    finally:
+        Path(test_file).unlink(missing_ok=True)
+
+    # Save non-secret defaults back to .env for next time.
+    save_env = {
+        "R2_BUCKET": r2_bucket,
+        "R2_ACCOUNT_ID": r2_account,
+        "R2_ACCESS_KEY_ID": r2_key_id,
+        "R2_PUBLIC_DOMAIN": r2_public_domain,
+    }
+    if confirm("Save R2 secret access key to .env?", default=False):
+        save_env["R2_SECRET_ACCESS_KEY"] = r2_secret
+    save_dotenv(ENV_FILE, save_env)
+    print(f"  ✔ Saved settings to {ENV_FILE}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Create downloadable backups of sites and store them in R2")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("runcloud", help="back up one RunCloud app to R2")
+    subparsers.add_parser("test", help="test R2 bucket read/write credentials")
+    args = parser.parse_args()
+
+    check_tools()
+
+    if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
+        if confirm(".env not found. Create it from .env.example?", default=True):
+            ENV_FILE.write_text(ENV_EXAMPLE.read_text())
+            print(f"  ✔ Created {ENV_FILE}")
+
+    env = load_dotenv(ENV_FILE)
+
+    if args.command == "runcloud":
+        backup_runcloud(env)
+    elif args.command == "test":
+        test_r2(env)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n  Aborted.")
+        sys.exit(1)
+    except RuntimeError as e:
+        print(f"\n✖ {e}")
+        sys.exit(1)

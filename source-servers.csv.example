@@ -1,0 +1,18 @@
+# source-servers.csv  —  inventory of source servers for `migrate domain.tld`
+#
+# Columns:
+#   name,type,ssh_host,ssh_port,ssh_user,ssh_key,api_token,api_url,server_id,web_directory,notes
+#
+#   type: runcloud | ploi | coolify | ssh
+#   ssh_host: IP or hostname (without username; put username in ssh_user)
+#   ssh_user: SSH username
+#   ssh_key: path to private key
+#   api_token / api_url / server_id: only needed for type=ploi
+#   web_directory: only used for type=ploi (default /public)
+#   notes: free text
+#
+name,type,ssh_host,ssh_port,ssh_user,ssh_key,api_token,api_url,server_id,web_directory,notes
+runcloud-prod,runcloud,203.0.113.10,22,runcloud-user,~/.ssh/id_ed25519,,,,,/var/www,
+ploi-old,ploi,203.0.113.20,22,ploi,~/.ssh/id_ed25519,my-ploi-api-token,https://ploi.io/api,12345,/public,old Ploi server
+coolify-prod,coolify,203.0.113.30,22,root,~/.ssh/id_ed25519,,,,,/public,Coolify host
+do-legacy,ssh,203.0.113.40,22,root,~/.ssh/id_ed25519,,,,,DigitalOcean droplet

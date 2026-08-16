@@ -1,0 +1,705 @@
+#!/usr/bin/env python3
+"""
+Unified migration CLI.
+
+Usage:
+  migrate domain.tld
+  migrate setup
+
+Discovers which configured source server hosts the WordPress site for the
+given domain, then migrates it to a target Ploi server. Source servers are
+read from config/source-servers.csv (see source-servers.csv.example).
+
+The script prompts for anything missing from .env or the inventory, and saves
+new values back to .env.
+
+Requirements: python3, bash, ssh, scp, ssh-keygen, curl, jq, zip, unzip.
+"""
+
+import os
+import sys
+import csv
+import json
+import shlex
+import subprocess
+import argparse
+from pathlib import Path
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+
+ROOT = Path(__file__).resolve().parent
+ENV_FILE = ROOT / ".env"
+ENV_EXAMPLE = ROOT / ".env.example"
+SOURCE_SERVERS_EXAMPLE = ROOT / "source-servers.csv.example"
+
+
+def expand_path(value):
+    """Expand a leading ~ to $HOME."""
+    if value and value.startswith("~"):
+        value = str(Path.home()) + value[1:]
+    return value
+
+
+def load_dotenv(path):
+    """Read KEY=VALUE lines from a file, ignoring comments/blank lines."""
+    env = {}
+    if not path.exists():
+        return env
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        val = val.strip().strip('"').strip("'")
+        env[key.strip()] = expand_path(val)
+    return env
+
+
+def save_dotenv(path, env):
+    """Write env back to .env, preserving existing comments/order when possible."""
+    existing_lines = []
+    if path.exists():
+        for raw_line in path.read_text().splitlines():
+            line = raw_line.strip()
+            if line.startswith("#") or "=" not in line:
+                existing_lines.append(raw_line)
+                continue
+            key = line.split("=", 1)[0].strip()
+            if key in env:
+                v = env[key]
+                v = v.strip().strip('"').strip("'")
+                if " " in v or "#" in v:
+                    v = f'"{v}"'
+                existing_lines.append(f"{key}={v}")
+                del env[key]
+            else:
+                existing_lines.append(raw_line)
+
+    if env:
+        existing_lines.append("")
+        for key, v in sorted(env.items()):
+            v = v.strip().strip('"').strip("'")
+            if " " in v or "#" in v:
+                v = f'"{v}"'
+            existing_lines.append(f"{key}={v}")
+
+    path.write_text("\n".join(existing_lines) + "\n")
+    os.chmod(path, 0o600)
+
+
+def prompt(msg, default=None, secret=False, required=False):
+    display_default = "*****" if (secret and default) else default
+    if default:
+        raw = input(f"{msg} [{display_default}]: ").strip()
+    else:
+        raw = input(f"{msg}: ").strip()
+    value = raw if raw else (default or "")
+    while required and not value:
+        value = input(f"{msg} (required): ").strip()
+    return value
+
+
+def confirm(msg, default=True):
+    hint = "Y/n" if default else "y/N"
+    while True:
+        reply = input(f"{msg} [{hint}]: ").strip().lower()
+        if not reply:
+            return default
+        if reply in ("y", "yes"):
+            return True
+        if reply in ("n", "no"):
+            return False
+
+
+def run(cmd, env=None, cwd=None, check=True):
+    """Run a shell command, streaming output to the terminal."""
+    print(f"\n  → {cmd}\n")
+    result = subprocess.run(cmd, shell=True, cwd=cwd, env=env)
+    if check and result.returncode != 0:
+        raise RuntimeError(f"Command failed with exit code {result.returncode}")
+    return result
+
+
+def check_tools():
+    needed = ["bash", "ssh", "scp", "ssh-keygen", "curl", "jq", "zip", "unzip"]
+    missing = []
+    for tool in needed:
+        check = subprocess.run(["bash", "-c", f"command -v {tool}"], capture_output=True)
+        if check.returncode != 0:
+            missing.append(tool)
+    if missing:
+        print(f"✖ Missing required tools: {', '.join(missing)}")
+        sys.exit(1)
+
+
+def ploi_api_request(token, api_url, path):
+    url = api_url.rstrip("/") + "/" + path.lstrip("/")
+    req = Request(url, headers={
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    })
+    try:
+        with urlopen(req) as resp:
+            return True, json.loads(resp.read().decode())
+    except HTTPError as e:
+        body = e.read().decode()
+        try:
+            return False, json.loads(body)
+        except json.JSONDecodeError:
+            return False, {"message": body}
+
+
+def ploi_get_servers(token, api_url):
+    ok, data = ploi_api_request(token, api_url, "servers")
+    if not ok:
+        msg = data.get("message", "unknown error")
+        print(f"✖ Ploi API error: {msg}")
+        return []
+    return data.get("data", [])
+
+
+def ploi_pick_server(token, api_url, label):
+    servers = ploi_get_servers(token, api_url)
+    if not servers:
+        return prompt(f"Ploi {label} server ID (numeric)", required=True)
+    print(f"\n  Available Ploi {label} servers:")
+    for i, s in enumerate(servers, 1):
+        php_versions = ", ".join(s.get("installed_php_versions") or [])
+        print(f"    {i}) {s.get('name')}  id={s.get('id')}  ip={s.get('ip_address')}  php: {php_versions}")
+    choice = prompt(f"Choose {label} server", "1")
+    try:
+        return str(servers[int(choice) - 1]["id"])
+    except (ValueError, IndexError):
+        print("✖ Invalid server selection")
+        sys.exit(1)
+
+
+def load_source_servers(path):
+    """Return a list of source server dicts from the inventory CSV."""
+    servers = []
+    if not path.exists():
+        return servers
+    with path.open(newline="") as f:
+        reader = csv.DictReader(f, skipinitialspace=True)
+        for row in reader:
+            row = {k.strip(): (v or "").strip() for k, v in row.items()}
+            name = row.get("name", "")
+            if not name or name.startswith("#"):
+                continue
+            for key in ("ssh_key", "api_token", "api_url"):
+                row[key] = expand_path(row.get(key, ""))
+            servers.append(row)
+    return servers
+
+
+def save_source_server(path, server):
+    """Append one source server to the inventory CSV, creating headers if needed."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "name", "type", "ssh_host", "ssh_port", "ssh_user", "ssh_key",
+        "api_token", "api_url", "server_id", "web_directory", "notes",
+    ]
+    write_header = not path.exists() or path.stat().st_size == 0
+    with path.open("a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if write_header:
+            writer.writeheader()
+        writer.writerow({k: server.get(k, "") for k in fieldnames})
+
+
+def source_servers_file(env):
+    csv_path = os.environ.get("SOURCE_SERVERS_CSV") or env.get("SOURCE_SERVERS_CSV", "config/source-servers.csv")
+    return ROOT / csv_path
+
+
+def normalize_domain(d):
+    d = d.lower()
+    if d.startswith("http://"):
+        d = d[7:]
+    elif d.startswith("https://"):
+        d = d[8:]
+    d = d.split("/")[0].split(":")[0]
+    if d.startswith("www."):
+        d = d[4:]
+    return d
+
+
+def ssh_probe(server, domain):
+    """Probe an SSH-reachable server for a WordPress install matching domain."""
+    ssh_user = server.get("ssh_user") or "root"
+    ssh_host = server.get("ssh_host", "")
+    if not ssh_host:
+        return None
+    host_spec = f"{ssh_user}@{ssh_host}"
+    env = os.environ.copy()
+    env.update({
+        "SSH_HOST": host_spec,
+        "SSH_PORT": server.get("ssh_port") or "22",
+        "SSH_KEY": server.get("ssh_key") or env.get("SSH_KEY") or str(Path.home() / ".ssh/id_ed25519"),
+        "DOMAIN": domain,
+        "BATCH": "1",
+    })
+    try:
+        result = subprocess.run(
+            [str(ROOT / "lib" / "find-wp.sh")],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+        lines = result.stdout.strip().splitlines()
+        data = {}
+        for line in lines:
+            if "=" in line:
+                k, v = line.split("=", 1)
+                data[k.strip()] = v.strip()
+        if data.get("status") == "ok":
+            return {
+                "server": server,
+                "type": server.get("type"),
+                "wp_path": data.get("wp_path"),
+                "siteurl": data.get("siteurl"),
+                "wp_version": data.get("wp_version"),
+                "php_version": data.get("php_version"),
+                "db_name": data.get("db_name"),
+                "coolify_service_uuid": data.get("coolify_service_uuid"),
+            }
+    except Exception as e:
+        print(f"  ! probe failed for {server.get('name')}: {e}")
+    return None
+
+
+def ploi_probe(server, domain, env=None):
+    """Probe a Ploi source server via API for a site matching domain."""
+    env = env or {}
+    token = server.get("api_token") or env.get("PLOI_API_TOKEN")
+    api_url = server.get("api_url") or env.get("PLOI_API_URL") or "https://ploi.io/api"
+    if not token:
+        return None
+    try:
+        server_id = server.get("server_id")
+        if not server_id:
+            servers = ploi_get_servers(token, api_url)
+            for s in servers:
+                match = _ploi_match_site(token, api_url, str(s["id"]), domain)
+                if match:
+                    match["server"] = server
+                    match["ploi_server_name"] = s.get("name")
+                    return match
+            return None
+        return _ploi_match_site(token, api_url, server_id, domain, server)
+    except Exception as e:
+        print(f"  ! Ploi API probe failed for {server.get('name')}: {e}")
+    return None
+
+
+def _ploi_match_site(token, api_url, server_id, domain, server=None):
+    ok, data = ploi_api_request(token, api_url, f"servers/{server_id}/sites")
+    if not ok:
+        return None
+    target = normalize_domain(domain)
+    for site in data.get("data", []):
+        site_domain = normalize_domain(site.get("domain", ""))
+        if site_domain == target:
+            system_user = site.get("system_user", "")
+            root_dir = site.get("root_directory") or f"/home/{system_user}/{site.get('domain')}"
+            return {
+                "server": server,
+                "type": "ploi",
+                "system_user": system_user,
+                "site_root": root_dir,
+                "site_domain": site.get("domain"),
+                "wp_version": "unknown",
+                "php_version": site.get("php_version", "unknown"),
+                "ploi_server_id": server_id,
+            }
+    return None
+
+
+def probe_all_sources(servers, domain, env=None, source_type=None):
+    matches = []
+    for server in servers:
+        stype = server.get("type")
+        if source_type and stype != source_type:
+            continue
+        print(f"  → Checking {server.get('name')} ({stype}) …")
+        if stype == "ploi":
+            m = ploi_probe(server, domain, env)
+        else:
+            m = ssh_probe(server, domain)
+        if m:
+            matches.append(m)
+            print(f"    ✔ found at {m.get('wp_path') or m.get('site_root')}")
+    return matches
+
+
+def ask_new_source_server(env):
+    """Interactively add a new source server and return it."""
+    print("\n--- Add a new source server ---")
+    types = ["runcloud", "ploi", "coolify", "ssh"]
+    stype = prompt("Server type", ", ".join(types), required=True)
+    name = prompt("Short name", required=True)
+    ssh_host = prompt("SSH host/IP", required=True)
+    ssh_port = prompt("SSH port", env.get("SSH_PORT") or "22", required=True)
+    ssh_user_default = {
+        "runcloud": "runcloud-user",
+        "ploi": "ploi",
+        "coolify": "root",
+        "ssh": "root",
+    }.get(stype, "root")
+    ssh_user = prompt("SSH username", ssh_user_default, required=True)
+    ssh_key_default = env.get("SSH_KEY") or env.get("PLOI_SOURCE_SSH_KEY") or str(Path.home() / ".ssh/id_ed25519")
+    ssh_key = prompt("SSH private key", ssh_key_default, required=True)
+    api_token = ""
+    api_url = ""
+    server_id = ""
+    web_directory = "/public"
+    if stype == "ploi":
+        server_id = prompt("Ploi server ID (numeric, optional)", default="")
+        if not server_id:
+            token = env.get("PLOI_API_TOKEN") or prompt("Ploi API token", secret=True, required=True)
+            api_url = env.get("PLOI_API_URL") or "https://ploi.io/api"
+            server_id = ploi_pick_server(token, api_url, "source")
+    notes = prompt("Notes (optional)", default="")
+    server = {
+        "name": name,
+        "type": stype,
+        "ssh_host": ssh_host,
+        "ssh_port": ssh_port,
+        "ssh_user": ssh_user,
+        "ssh_key": ssh_key,
+        "api_token": api_token,
+        "api_url": api_url,
+        "server_id": server_id,
+        "web_directory": web_directory,
+        "notes": notes,
+    }
+    save_source_server(source_servers_file(env), server)
+    return server
+
+
+def choose_match(matches, domain):
+    if len(matches) == 1:
+        return matches[0]
+    print(f"\n  {len(matches)} source servers host {domain}:")
+    for i, m in enumerate(matches, 1):
+        srv = m["server"]
+        loc = m.get("wp_path") or m.get("site_root") or "(API match)"
+        print(f"    {i}) {srv.get('name')} ({srv.get('type')}) — {loc}")
+    choice = prompt("Use which source?", "1")
+    try:
+        return matches[int(choice) - 1]
+    except (ValueError, IndexError):
+        print("✖ Invalid selection")
+        sys.exit(1)
+
+
+def find_latest_zip(domain):
+    downloads = ROOT / "downloads"
+    if not downloads.exists():
+        return None
+    candidates = sorted(downloads.glob(f"{domain}*.zip"))
+    return candidates[-1] if candidates else None
+
+
+def run_backup(match, domain, env):
+    source = match["server"]
+    stype = source.get("type")
+    print(f"\n--- Backing up {domain} from {source.get('name')} ({stype}) ---")
+    child_env = os.environ.copy()
+    child_env["BATCH"] = "1"
+    child_env["DOMAIN"] = domain
+
+    if stype == "runcloud":
+        child_env.update({
+            "RC_USER": source.get("ssh_user", "root"),
+            "RC_IP": source.get("ssh_host"),
+            "SSH_KEY": source.get("ssh_key") or env.get("SSH_KEY", ""),
+            "SSH_PORT": source.get("ssh_port", "22"),
+        })
+        run(f"{ROOT}/runcloud-wp-backup.sh", env=child_env)
+    elif stype == "ploi":
+        child_env.update({
+            "PLOI_SOURCE_SYSTEM_USER": match.get("system_user", ""),
+            "PLOI_SOURCE_DOMAIN": domain,
+            "PLOI_SOURCE_SSH_HOST": source.get("ssh_host"),
+            "PLOI_SOURCE_SSH_PORT": source.get("ssh_port", "22"),
+            "PLOI_SOURCE_SSH_USER": source.get("ssh_user", "ploi"),
+            "PLOI_SOURCE_SSH_KEY": source.get("ssh_key") or env.get("PLOI_SOURCE_SSH_KEY", ""),
+            "PLOI_API_TOKEN": source.get("api_token") or env.get("PLOI_API_TOKEN", ""),
+            "PLOI_API_URL": source.get("api_url") or env.get("PLOI_API_URL", "https://ploi.io/api"),
+            "PLOI_SOURCE_SERVER_ID": match.get("ploi_server_id", source.get("server_id", "")),
+            "PLOI_SOURCE_WEB_DIRECTORY": source.get("web_directory", "/public"),
+        })
+        run(f"{ROOT}/ploi-wp-backup.sh", env=child_env)
+    else:
+        # coolify, ssh, digitalocean, generic
+        ssh_user = source.get("ssh_user", "root")
+        ssh_host = source.get("ssh_host")
+        child_env.update({
+            "SSH_HOST": f"{ssh_user}@{ssh_host}",
+            "SSH_PORT": source.get("ssh_port", "22"),
+            "SSH_KEY": source.get("ssh_key") or env.get("SSH_KEY", ""),
+        })
+        run(f"{ROOT}/ssh-wp-backup.sh", env=child_env)
+
+
+def configure_target(env, target_server_id_arg=None):
+    print("\n--- Target Ploi server ---")
+    target_token = prompt("Ploi target API token", env.get("PLOI_API_TOKEN"), secret=True, required=True)
+    target_url = prompt("Ploi target API URL", env.get("PLOI_API_URL") or "https://ploi.io/api", required=True)
+    target_server_id = target_server_id_arg or env.get("PLOI_SERVER_ID", "").strip()
+    if not target_server_id:
+        target_server_id = ploi_pick_server(target_token, target_url, "target")
+
+    target_ssh_host = prompt("Ploi target SSH host/IP", env.get("PLOI_SSH_HOST"), required=True)
+    target_ssh_user = prompt("Ploi target admin SSH username", env.get("PLOI_SSH_USER") or "ploi", required=True)
+    target_ssh_key_default = env.get("PLOI_SSH_KEY") or env.get("SSH_KEY") or str(Path.home() / ".ssh/id_ed25519")
+    target_ssh_key = prompt("Ploi target SSH private key", target_ssh_key_default, required=True)
+    target_php = prompt("PHP version for new Ploi site", env.get("PLOI_PHP_VERSION") or "8.2", required=True)
+
+    return {
+        "PLOI_API_TOKEN": target_token,
+        "PLOI_API_URL": target_url,
+        "PLOI_SERVER_ID": target_server_id,
+        "PLOI_SSH_HOST": target_ssh_host,
+        "PLOI_SSH_USER": target_ssh_user,
+        "PLOI_SSH_KEY": target_ssh_key,
+        "PLOI_PHP_VERSION": target_php,
+    }
+
+
+def run_restore(domain, zip_file, target_env):
+    print(f"\n--- Restoring {domain} to target Ploi server ---")
+    restore_env = os.environ.copy()
+    restore_env.update({
+        "DOMAIN": domain,
+        "BATCH": "1",
+    })
+    restore_env.update(target_env)
+    run(f"{ROOT}/ploi-migrate.sh {shlex.quote(str(zip_file))}", env=restore_env)
+
+
+def prompt_or_confirm(msg, key, env, default=None, secret=False):
+    """If the key already has a value in env, show a green check and return it.
+    Otherwise prompt (with optional default)."""
+    existing = env.get(key)
+    if existing:
+        masked = "*****" if secret else existing
+        print(f"  ✔ {msg} already set: [{masked}]")
+        return existing
+    return prompt(msg, default, secret=secret)
+
+
+def interactive_setup(env):
+    print("\n" + "=" * 60)
+    print("  migrate setup — configure credentials")
+    print("=" * 60)
+    print("  Already-set values are shown with a green checkmark and skipped.")
+    print("  Leave a value empty to skip it. Current defaults are shown in brackets.")
+
+    updates = {}
+
+    print("\n--- Source SSH defaults ---")
+    updates["SSH_KEY"] = prompt_or_confirm("Default SSH private key", "SSH_KEY", env,
+                                           env.get("SSH_KEY") or str(Path.home() / ".ssh/id_ed25519"))
+    updates["SSH_PORT"] = prompt_or_confirm("Default SSH port", "SSH_PORT", env,
+                                            env.get("SSH_PORT") or "22")
+
+    print("\n--- RunCloud backup defaults ---")
+    updates["CLIENTS_CSV"] = prompt_or_confirm("Batch CSV path", "CLIENTS_CSV", env,
+                                              env.get("CLIENTS_CSV") or "config/clients.csv")
+
+    print("\n--- Ploi source (for Ploi → Ploi) ---")
+    updates["PLOI_SOURCE_SSH_HOST"] = prompt_or_confirm("Ploi source SSH host", "PLOI_SOURCE_SSH_HOST", env)
+    updates["PLOI_SOURCE_SSH_USER"] = prompt_or_confirm("Ploi source SSH user", "PLOI_SOURCE_SSH_USER", env, "ploi")
+    updates["PLOI_SOURCE_SSH_KEY"] = prompt_or_confirm("Ploi source SSH key", "PLOI_SOURCE_SSH_KEY", env,
+                                                        updates.get("SSH_KEY") or env.get("SSH_KEY"))
+    updates["PLOI_SOURCE_WEB_DIRECTORY"] = prompt_or_confirm("Ploi source web directory", "PLOI_SOURCE_WEB_DIRECTORY", env,
+                                                            "/public")
+
+    print("\n--- Target Ploi server ---")
+    updates["PLOI_API_TOKEN"] = prompt_or_confirm("Ploi API token", "PLOI_API_TOKEN", env, secret=True)
+    updates["PLOI_API_URL"] = prompt_or_confirm("Ploi API URL", "PLOI_API_URL", env, "https://ploi.io/api")
+    updates["PLOI_SSH_HOST"] = prompt_or_confirm("Ploi target SSH host", "PLOI_SSH_HOST", env)
+    updates["PLOI_SSH_USER"] = prompt_or_confirm("Ploi target admin SSH user", "PLOI_SSH_USER", env, "ploi")
+    updates["PLOI_SSH_KEY"] = prompt_or_confirm("Ploi target SSH key", "PLOI_SSH_KEY", env,
+                                                updates.get("SSH_KEY") or env.get("SSH_KEY"))
+    updates["PLOI_PHP_VERSION"] = prompt_or_confirm("Default PHP version", "PLOI_PHP_VERSION", env, "8.2")
+
+    print("\n--- Per-site isolation / behavior ---")
+    updates["PLOI_SYSTEM_USER_STRATEGY"] = prompt_or_confirm("System user strategy", "PLOI_SYSTEM_USER_STRATEGY", env,
+                                                          "per-site")
+    updates["PLOI_ADD_SSH_KEY_TO_SITE_USER"] = prompt_or_confirm("Add SSH key to site user", "PLOI_ADD_SSH_KEY_TO_SITE_USER", env,
+                                                                "yes")
+    updates["PLOI_CHROOT_SITE_USER"] = prompt_or_confirm("Chroot site user", "PLOI_CHROOT_SITE_USER", env, "yes")
+    updates["PLOI_SSL_MODE"] = prompt_or_confirm("SSL mode", "PLOI_SSL_MODE", env, "letsencrypt")
+    updates["PLOI_DOMAIN_MODE"] = prompt_or_confirm("Domain mode", "PLOI_DOMAIN_MODE", env, "same")
+
+    print("\n--- Cloudflare ---")
+    updates["CLOUDFLARE_API_TOKEN"] = prompt_or_confirm("Cloudflare API token", "CLOUDFLARE_API_TOKEN", env, secret=True)
+    updates["CLOUDFLARE_ACCOUNT_ID"] = prompt_or_confirm("Cloudflare account ID", "CLOUDFLARE_ACCOUNT_ID", env)
+    updates["CLOUDFLARE_API_URL"] = prompt_or_confirm("Cloudflare API URL", "CLOUDFLARE_API_URL", env,
+                                                       "https://api.cloudflare.com/client/v4")
+
+    print("\n--- R2 / backup ---")
+    updates["R2_BUCKET"] = prompt_or_confirm("R2 bucket name", "R2_BUCKET", env)
+    updates["R2_ACCOUNT_ID"] = prompt_or_confirm("R2 account ID", "R2_ACCOUNT_ID", env)
+    updates["R2_ACCESS_KEY_ID"] = prompt_or_confirm("R2 access key ID", "R2_ACCESS_KEY_ID", env)
+    updates["R2_SECRET_ACCESS_KEY"] = prompt_or_confirm("R2 secret access key", "R2_SECRET_ACCESS_KEY", env, secret=True)
+    updates["R2_PUBLIC_DOMAIN"] = prompt_or_confirm("R2 public domain", "R2_PUBLIC_DOMAIN", env)
+    updates["R2_URL_TTL_SECONDS"] = prompt_or_confirm("R2 URL TTL seconds", "R2_URL_TTL_SECONDS", env, "2592000")
+    updates["EMAIL_FROM"] = prompt_or_confirm("Backup notification from address", "EMAIL_FROM", env)
+    updates["EMAIL_FROM_NAME"] = prompt_or_confirm("Backup notification from name", "EMAIL_FROM_NAME", env,
+                                                   "RunCloud Backups")
+
+    # Drop empty values so we don't overwrite existing settings with blanks.
+    updates = {k: v for k, v in updates.items() if v}
+
+    if updates:
+        save_dotenv(ENV_FILE, updates)
+        print(f"\n  ✔ Saved {len(updates)} value(s) to {ENV_FILE}")
+    else:
+        print("\n  → No changes to save.")
+
+    print("\n  You can now run:")
+    print("    migrate example.com")
+    print("    backup runcloud")
+    print("    backup test")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Migrate a WordPress site to Ploi")
+    subparsers = parser.add_subparsers(dest="command")
+
+    parser_migrate = subparsers.add_parser("domain", help="migrate a domain")
+    parser_migrate.add_argument("domain", help="domain to migrate, e.g. example.com")
+    parser_migrate.add_argument("--source-type", choices=["runcloud", "ploi", "coolify", "ssh"],
+                        help="only probe source servers of this type")
+    parser_migrate.add_argument("--target-server-id", help="target Ploi server ID")
+
+    subparsers.add_parser("setup", help="interactively configure .env credentials")
+
+    args = parser.parse_args()
+
+    if args.command == "setup":
+        if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
+            if confirm(".env not found. Create it from .env.example?", default=True):
+                ENV_FILE.write_text(ENV_EXAMPLE.read_text())
+                print(f"  ✔ Created {ENV_FILE}")
+        env = load_dotenv(ENV_FILE)
+        interactive_setup(env)
+        return
+
+    if args.command is None or args.command == "domain":
+        domain = (getattr(args, "domain", None) or "").lower().strip()
+        if not domain:
+            parser.error("domain is required")
+            sys.exit(1)
+
+        print("=" * 60)
+        print(f"  migrate {domain} → Ploi")
+        print("=" * 60)
+
+        check_tools()
+
+        if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
+            if confirm(".env not found. Create it from .env.example?", default=True):
+                ENV_FILE.write_text(ENV_EXAMPLE.read_text())
+                print(f"  ✔ Created {ENV_FILE}")
+
+        env = load_dotenv(ENV_FILE)
+        servers_file = source_servers_file(env)
+
+        if not servers_file.exists() and SOURCE_SERVERS_EXAMPLE.exists():
+            if confirm("Source server inventory not found. Create it from source-servers.csv.example?", default=True):
+                servers_file.parent.mkdir(parents=True, exist_ok=True)
+                servers_file.write_text(SOURCE_SERVERS_EXAMPLE.read_text())
+                print(f"  ✔ Created {servers_file}")
+                print("  → Edit that file with your real source servers, then rerun.")
+                sys.exit(0)
+
+        servers = load_source_servers(servers_file)
+        if not servers:
+            print("\n! No source servers configured.")
+            if not confirm("Add one now?", default=True):
+                sys.exit(1)
+            server = ask_new_source_server(env)
+            servers = [server]
+
+        print(f"\n--- Discovering where {domain} is hosted ---")
+        matches = probe_all_sources(servers, domain, env=env, source_type=args.source_type)
+
+        if not matches:
+            print(f"\n! Could not find {domain} on any configured source server.")
+            if not confirm("Add a new source server that hosts it?", default=True):
+                sys.exit(1)
+            server = ask_new_source_server(env)
+            m = None
+            if server.get("type") == "ploi":
+                m = ploi_probe(server, domain, env)
+            else:
+                m = ssh_probe(server, domain)
+            if not m:
+                print(f"✖ Still could not find {domain} on {server.get('name')}")
+                sys.exit(1)
+            matches = [m]
+
+        match = choose_match(matches, domain)
+        source = match["server"]
+        print(f"\n  → Source: {source.get('name')} ({source.get('type')}) — "
+              f"{match.get('wp_path') or match.get('site_root')}")
+
+        if not confirm(f"Migrate {domain} from this source?", default=True):
+            print("  Aborted.")
+            sys.exit(0)
+
+        target_env = configure_target(env, target_server_id_arg=args.target_server_id)
+        env.update(target_env)
+        save_dotenv(ENV_FILE, env)
+        print(f"\n  ✔ Saved target settings to {ENV_FILE}")
+
+        run_backup(match, domain, env)
+        zip_file = find_latest_zip(domain)
+        if not zip_file:
+            print(f"\n✖ Backup succeeded but no zip was found in ./downloads for {domain}")
+            sys.exit(1)
+        print(f"\n  ✔ Backup zip: {zip_file}")
+
+        if not confirm("Restore this backup to the target Ploi server?", default=True):
+            print(f"\n  Backup is ready: {zip_file}")
+            print("  Restore later with:")
+            print(f"    DOMAIN={shlex.quote(domain)} ./ploi-migrate.sh {shlex.quote(str(zip_file))}")
+            return
+
+        run_restore(domain, zip_file, target_env)
+
+        print("\n" + "=" * 60)
+        print("  ✔ Migration complete")
+        print("=" * 60)
+        print(f"  Site:   https://{domain}")
+        print(f"  Backup: {zip_file}")
+        print(f"  Status: config/status.tsv")
+        if match["server"].get("type") == "coolify":
+            uuid = match.get("coolify_service_uuid") or ""
+            print()
+            print("  NOTE: The Coolify source service was left untouched.")
+            print("        After you visually verify the migrated site, remove it manually:")
+            print(f"          SSH_HOST={match['server'].get('ssh_user', 'root')}@{match['server'].get('ssh_host')} \\")
+            print(f"          COOLIFY_SERVICE_UUID={uuid or '<uuid>'} \\")
+            print(f"          ./coolify-remove.sh")
+        return
+
+    parser.print_help()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n  Aborted.")
+        sys.exit(1)
+    except RuntimeError as e:
+        print(f"\n✖ {e}")
+        sys.exit(1)

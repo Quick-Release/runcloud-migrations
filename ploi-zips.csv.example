@@ -1,0 +1,8 @@
+# ploi-zips.csv — one site per line: domain,zip_path
+# Header row whose first column is "domain" is auto-skipped.
+# zip_path can be absolute or relative to the project root.
+#
+# domain,zip_path
+example.com,downloads/example.com_20240115-143000.zip
+shop.example.com,downloads/shop.example.com_20240115-143005.zip
+client-site.co.uk,downloads/client-site-co-uk_20240115-143012.zip

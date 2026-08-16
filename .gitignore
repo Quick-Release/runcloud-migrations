@@ -2,11 +2,21 @@
 .env
 .env.*
 !.env.example
+source-servers.csv
+
+# ── Local backups / client reports — NEVER commit ───────────────────────────
+backups/
+reports/
 
 # ── Per-site generated data (WordPress backups, server profiles, run logs) ──
 /downloads/
 /config/
 /logs/
+
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
 
 # ── OS / editor cruft ───────────────────────────────────────────────────────
 .DS_Store
