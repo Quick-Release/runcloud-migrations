@@ -55,7 +55,7 @@ Triage order: do the top three first. They unlock everything else.
 
 - [ ] **T8. Add a fixture-based test for `lib/find-wp.sh`.** Spin up `sshd` in a container with a fake WordPress install; verify the module finds it, extracts the right version/PHP/DB info, and emits the documented `status=ok` key=value contract. This module is already deep and testable — first end-to-end integration test.
 
-- [ ] **T9. Add tests for the Ploi API client.** With T2 done, `pli_curl` is the only API call path. Mock `curl` (or wrap it behind a function variable that tests can override) and verify:
+- [x] **T9. Add tests for the Ploi API client.** With T2 done, `pli_curl` is the only API call path. Mock `curl` (or wrap it behind a function variable that tests can override) and verify:
   - relative vs absolute paths in the URL
   - `--fail-with-body` fallback when `curl` is old
   - the `Authorization` / `Accept` / `Content-Type` headers
