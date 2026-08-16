@@ -11,7 +11,7 @@ Triage order: do the top three first. They unlock everything else.
 
 - [ ] **T1. Extract `load_dotenv` / `save_dotenv` / `prompt` / `confirm` into a shared Python module.** Three identical copies in `backup`, `migrate`, and `migrate-cli.py`. Create `lib/cli_common.py` (or similar) and have all three CLIs `import` from it. Zero behaviour change; ~300 lines of duplicated code collapsed into one source of truth.
 
-- [ ] **T2. Delete `ploi_source_curl` and its siblings.** After the token consolidation, `ploi_curl` and `ploi_source_curl` differ only in comments. Update the two callers (`ploi-wp-backup.sh`, `pli-site-info.sh`) to call `ploi_curl`. Delete `pli_source_ssh_opts`, `pli_source_ssh_host`, `pli_source_remote`, `pli_source_scp` only if they have no remaining callers; otherwise keep them as thin aliases.
+- [x] **T2. Delete `ploi_source_curl` and its siblings.** After the token consolidation, `ploi_curl` and `ploi_source_curl` differ only in comments. Update the two callers (`ploi-wp-backup.sh`, `pli-site-info.sh`) to call `ploi_curl`. Delete `pli_source_ssh_opts`, `pli_source_ssh_host`, `pli_source_remote`, `pli_source_scp` only if they have no remaining callers; otherwise keep them as thin aliases.
 
 - [ ] **T3. Pull side effects out of `lib/common.sh` source time.** Today, sourcing the file runs `load_env "$PROJECT_ROOT/.env"` and `mkdir -p` on four directories. Make `.env` loading and directory creation explicit calls (e.g. `load_env` and `ensure_dirs`) invoked once by each top-level dispatch script (`migrate`, `batch-migrate.sh`, etc.). Sourcing `lib/common.sh` becomes pure — functions only, no I/O. Unlocks unit-testing the shell side.
 
