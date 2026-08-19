@@ -16,7 +16,8 @@
 #
 # Optional env:
 #   SSH_KEY, SSH_PORT, R2_PUBLIC_DOMAIN, R2_URL_TTL_SECONDS,
-#   BACKUPS_DIR (default ./backups), RC_BACKUP_TEMP_DIR
+#   BACKUPS_DIR (default ./backups), RC_BACKUP_TEMP_DIR,
+#   RC_CLEANUP_REMOTE_ZIP (default yes; no = keep the remote temp dir)
 # ----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -174,8 +175,7 @@ R2_OBJECT_KEY="runcloud/${SAFE_APP}/${ZIP_NAME}"
 R2_URL=$("$PROJECT_ROOT/lib/r2-upload.sh" "$LOCAL_ZIP" "$R2_OBJECT_KEY") || die "R2 upload failed"
 
 step "Cleaning up remote temp directory ..."
-# shellcheck disable=SC2086
-remote "rm -rf $(shquote \"$REMOTE_TEMP\")" || warn "could not remove remote temp dir"
+cleanup_backup_remote_dir remote "$REMOTE_TEMP"
 
 EXPIRES_AT=$(date -u -d "@${R2_URL_TTL_SECONDS:-2592000} seconds" +%FT%TZ 2>/dev/null || date -u -v+30d +%FT%TZ)
 

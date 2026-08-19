@@ -20,18 +20,23 @@ is independent.
   Ploi-API surface is gone; `migrate` is the single Python migration CLI.
   Git history preserves the legacy file.
 
-- [ ] **T17. Extract the shared backup tails into `lib/backup-core.sh` —
-  tails only, not a framework.** The four workers (`runcloud-wp-backup.sh`,
-  `ploi-wp-backup.sh`, `ssh-wp-backup.sh`, `lib/backup-runcloud.sh`) each
-  hand-roll the same ~30-line tail: `unzip -t` verify → cleanup remote zip →
-  cleanup DB dump → `update_status` + final log. Variance is only *which*
-  remote-runner function is called (`remote`, `ploi_source_remote`) and one
-  naming inconsistency (`$DOWNLOADS` vs `$DOWNLOADS_DIR` — unify while there).
-  Helpers take the remote-runner function name as an argument. The discovery /
-  dump logic stays per-worker: that variance is genuine (RunCloud webapps,
-  Ploi admin reading `wp-config.php`, generic siteurl search). Must ship with
-  `tests/lib/backup-core.bats`. Do **not** attempt a unified pipeline — the
-  four paths touch production data mid-campaign.
+- [x] **T17. Extract the shared backup tails into `lib/backup-core.sh` —
+  tails only, not a framework.** Done: `verify_backup_zip`,
+  `cleanup_backup_remote_dir`, `cleanup_backup_db_dump` and `finish_backup`
+  (remote-runner passed by function name) now close out all three bash
+  workers; loaded via `lib/common.sh`, covered by
+  `tests/lib/backup-core.bats`. `$DOWNLOADS` alias dropped for
+  `$DOWNLOADS_DIR` everywhere. One honest correction to the ticket's
+  premise: `lib/backup-runcloud.sh`'s tail is a different contract (R2
+  upload, size verification, key=value output for the Python `backup`
+  CLI) — only its remote-temp cleanup matched, so only that call was
+  shared; forcing the rest would have been the framework this ticket
+  forbade. Two small unifications sanctioned by the ticket: the corrupt-
+  archive die message now always includes the path, and
+  `cleanup_backup_remote_dir` warns where the temp dir was left when
+  cleanup is disabled (was a silent skip in two workers); the Python
+  worker's remote cleanup is now gated by `RC_CLEANUP_REMOTE_ZIP` like
+  the others (default `yes` = old behaviour).
 
 - [x] **T18. Add minimal CI.** Done: `.github/workflows/ci.yml` runs
   `make lint && make test` on pushes to `main` and PRs (ubuntu runner;

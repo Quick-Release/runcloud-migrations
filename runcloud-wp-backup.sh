@@ -35,7 +35,6 @@ mkdir -p "$DOWNLOADS_DIR" "$CONFIG_DIR" "$LOGS_DIR" "$SERVERS_DIR" "$(dirname "$
 
 
 WORKSPACE="$PROJECT_ROOT"
-DOWNLOADS="$DOWNLOADS_DIR"
 
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"   # private key (NOT the .pub)
 SSH_PORT="${SSH_PORT:-22}"
@@ -231,7 +230,7 @@ fi
 # -- disk-space checks -------------------------------------------------------
 RC_MIN_FREE_BYTES="${RC_MIN_FREE_BYTES:-2147483648}"
 step "Checking available space ..."
-local_free=$(df -P "$DOWNLOADS" | awk 'NR==2 {print $4*1024}')
+local_free=$(df -P "$DOWNLOADS_DIR" | awk 'NR==2 {print $4*1024}')
 [ "$local_free" -ge "$RC_MIN_FREE_BYTES" ] || die "not enough local disk space: $(human_bytes "$local_free") available, need $(human_bytes "$RC_MIN_FREE_BYTES")"
 # shellcheck disable=SC2016
 remote_free=$(remote 'df -P "$HOME" 2>/dev/null || df -P /var/www 2>/dev/null || df -P /' | awk 'NR==2 {print $4*1024}')
@@ -267,13 +266,9 @@ if [ "$HAVE_ZIP" = "yes" ]; then
   remote "cd $(shquote "$WP_PATH") && zip -r -q $(shquote "$tmpdir/$FILE") ." \
     || { [ "$RC_CLEANUP_REMOTE_ZIP" = "yes" ] && remote "rm -rf $(shquote "$tmpdir")"; die "remote zip failed"; }
   step "Downloading $FILE ..."
-  if scp "${SCP_OPTS[@]}" "$SSH_HOST:$tmpdir/$FILE" "$DOWNLOADS/$FILE"; then
-    log "Downloaded -> $DOWNLOADS/$FILE"
-    if [ "$RC_CLEANUP_REMOTE_ZIP" = "yes" ]; then
-      remote "rm -rf $(shquote "$tmpdir")" || warn "could not remove remote temp $tmpdir"
-    else
-      warn "left remote temp dir: $tmpdir"
-    fi
+  if scp "${SCP_OPTS[@]}" "$SSH_HOST:$tmpdir/$FILE" "$DOWNLOADS_DIR/$FILE"; then
+    log "Downloaded -> $DOWNLOADS_DIR/$FILE"
+    cleanup_backup_remote_dir remote "$tmpdir"
   else
     if [ "$RC_CLEANUP_REMOTE_ZIP" = "yes" ]; then
       remote "rm -rf $(shquote "$tmpdir")" || true
@@ -285,33 +280,14 @@ else
   tmplocal="$(mktemp -d "$WORKSPACE/.dl.XXXXXX")"
   trap 'rm -rf "$tmplocal"' EXIT
   if rsync -a --info=progress2 -e "$RSYNC_E" "$SSH_HOST:$WP_PATH/" "$tmplocal/"; then
-    ( cd "$tmplocal" && zip -r -q "$DOWNLOADS/$FILE" . ) || die "local zip failed"
-    log "Archived -> $DOWNLOADS/$FILE"
+    ( cd "$tmplocal" && zip -r -q "$DOWNLOADS_DIR/$FILE" . ) || die "local zip failed"
+    log "Archived -> $DOWNLOADS_DIR/$FILE"
   else
     die "rsync failed (sql dump still on server at $WP_PATH/$DUMP_NAME)"
   fi
 fi
 
-# -- 3) verify the downloaded archive ----------------------------------------
-RC_VERIFY_ZIP="${RC_VERIFY_ZIP:-yes}"
-if [ "$RC_VERIFY_ZIP" = "yes" ]; then
-  step "Verifying downloaded archive ..."
-  unzip -t "$DOWNLOADS/$FILE" >/dev/null 2>&1 || die "downloaded archive is corrupt: $DOWNLOADS/$FILE"
-  log "Archive verified"
-fi
-
-# -- 4) optional cleanup of DB dump on RunCloud ------------------------------
-RC_CLEANUP_DB_DUMP="${RC_CLEANUP_DB_DUMP:-yes}"
-if [ "$RC_CLEANUP_DB_DUMP" = "yes" ]; then
-  step "Cleaning up DB dump on RunCloud server ..."
-  if remote "rm -f $(shquote "$WP_PATH/$DUMP_NAME")"; then
-    log "DB dump removed from server"
-  else
-    warn "could not remove DB dump from server"
-  fi
-fi
-
-# -- done --------------------------------------------------------------------
-echo >&2
-update_status "$SITE_KEY" "backed_up" "ok" "zip=$DOWNLOADS/$FILE"
-log "Backup complete: $DOWNLOADS/$FILE"
+# -- 3) verify, clean up source, record status -------------------------------
+verify_backup_zip "$DOWNLOADS_DIR/$FILE"
+cleanup_backup_db_dump remote "$WP_PATH" "$DUMP_NAME"
+finish_backup "$SITE_KEY" "$DOWNLOADS_DIR/$FILE"

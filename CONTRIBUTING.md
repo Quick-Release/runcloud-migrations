@@ -16,6 +16,8 @@ lib/
   strings.sh       - pure string helpers (safe_*, human_bytes, shquote, ...)
   status.sh        - status.tsv tracking (init/update/get_status)
   ploi.sh          - Ploi API client + SSH adapter family
+  backup-core.sh    - shared backup tail (verify/cleanup/finish helpers
+                     used by the backup workers)
   cli_common.py    - shared helpers for the Python CLIs (load_dotenv,
                      save_dotenv, prompt, confirm, expand_path)
   find-wp.sh       - deep module: probe a server for a WordPress install

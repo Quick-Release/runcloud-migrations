@@ -12,6 +12,7 @@
 #   lib/status.sh   - status.tsv tracking (init_status, update_status,
 #                     get_status)
 #   lib/ploi.sh     - Ploi API client + SSH adapter family
+#   lib/backup-core.sh - shared backup tail (verify/cleanup/finish)
 #
 # Sourcing is pure: no filesystem side effects. Dispatch scripts must
 # invoke load_env and mkdir -p explicitly after sourcing (see
@@ -47,3 +48,5 @@ STATUS_FILE="${STATUS_FILE:-$CONFIG_DIR/status.tsv}"
 . "$(dirname "${BASH_SOURCE[0]}")/status.sh"
 # shellcheck source=lib/ploi.sh
 . "$(dirname "${BASH_SOURCE[0]}")/ploi.sh"
+# shellcheck source=lib/backup-core.sh
+. "$(dirname "${BASH_SOURCE[0]}")/backup-core.sh"

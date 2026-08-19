@@ -169,7 +169,6 @@ ploi_source_remote "
 log "DB exported -> $WP_PATH/$DUMP_NAME"
 
 # -- 2) archive --------------------------------------------------------------
-RC_CLEANUP_REMOTE_ZIP="${RC_CLEANUP_REMOTE_ZIP:-yes}"
 step "Archiving site files on source server ..."
 ploi_source_remote "
   cd $(shquote "$WP_PATH") &&
@@ -186,26 +185,9 @@ else
   die "scp download failed"
 fi
 
-if [ "$RC_CLEANUP_REMOTE_ZIP" = "yes" ]; then
-  ploi_source_remote "rm -rf $(shquote "$REMOTE_ZIP_DIR")" || warn "could not remove remote temp dir"
-fi
+cleanup_backup_remote_dir ploi_source_remote "$REMOTE_ZIP_DIR"
 
-# -- 3) verify archive -------------------------------------------------------
-RC_VERIFY_ZIP="${RC_VERIFY_ZIP:-yes}"
-if [ "$RC_VERIFY_ZIP" = "yes" ]; then
-  step "Verifying downloaded archive ..."
-  unzip -t "$DOWNLOADS_DIR/$FILE" >/dev/null 2>&1 || die "downloaded archive is corrupt"
-  log "Archive verified"
-fi
-
-# -- 4) cleanup DB dump on source --------------------------------------------
-RC_CLEANUP_DB_DUMP="${RC_CLEANUP_DB_DUMP:-yes}"
-if [ "$RC_CLEANUP_DB_DUMP" = "yes" ]; then
-  step "Cleaning up DB dump on source server ..."
-  ploi_source_remote "rm -f $(shquote "$WP_PATH/$DUMP_NAME")" || warn "could not remove DB dump"
-fi
-
-# -- done --------------------------------------------------------------------
-echo >&2
-update_status "$SITE_KEY" "backed_up" "ok" "zip=$DOWNLOADS_DIR/$FILE"
-log "Backup complete: $DOWNLOADS_DIR/$FILE"
+# -- 3) verify, clean up source, record status -------------------------------
+verify_backup_zip "$DOWNLOADS_DIR/$FILE"
+cleanup_backup_db_dump ploi_source_remote "$WP_PATH" "$DUMP_NAME"
+finish_backup "$SITE_KEY" "$DOWNLOADS_DIR/$FILE"
