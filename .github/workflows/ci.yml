@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # shellcheck, python3, node/npm ship with the ubuntu runner image;
       # bats-core is the one missing piece.
