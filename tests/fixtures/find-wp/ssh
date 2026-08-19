@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
+# Fake ssh for the find-wp integration test. Executes the probe's "remote"
+# commands locally against the fixture filesystem.
+#
+# Resolves its own real path (tests invoke it through a symlink in a private
+# bin dir) so HOME is always the fixture root: the fixture bin/ (fake wp,
+# fake php) leads PATH, and the probe only searches the fixture via
+# FIND_WP_ROOTS set by the test. No network, no host filesystem leakage.
+SRC="$(readlink -f "${BASH_SOURCE[0]}")"
+export HOME="$(dirname "$SRC")"
+chmod +x "$HOME/bin/wp" "$HOME/bin/php" 2>/dev/null || true  # survive lost exec bits
+export PATH="$HOME/bin:$PATH"
 echo "FAKE_SSH: cmd=${!#}" >&2
 cmd="${!#}"
-export HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export PATH="$HOME/bin:$PATH"
 case "$cmd" in
-  'printf ok\n') echo "ok"; exit 0 ;;
+  'echo ok')                 echo "ok"; exit 0 ;;
 esac
 exec bash -c "$cmd"

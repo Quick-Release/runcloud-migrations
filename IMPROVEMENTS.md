@@ -3,88 +3,81 @@
 Each ticket is sized so it can be done in one focused pass and leaves the
 codebase in a working state. Mark items with `[x]` when completed.
 
-Triage order: do the top three first. They unlock everything else.
+---
+
+## Round 2 — active-migration hardening (current)
+
+Context: migrations are ongoing, so round 2 optimizes for robustness and
+lower maintenance surface. Decisions recorded 2025-ish grilling session:
+delete dead code, dedup conservatively, enforce with CI.
+
+Triage order: T18 first (green baseline for everything after), then the rest
+is independent.
+
+- [ ] **T16. Delete `migrate-cli.py`.** Nothing invokes it; it duplicates
+  `ploi_get_servers`, `ploi_pick_server`, `run`, `check_tools`,
+  `find_latest_zip`, `configure_target`, and `run_ploi_restore` from `migrate`.
+  In an active repo, a duplicated Ploi-API surface is a real risk: fixes
+  applied to `migrate` silently don't reach the legacy copy. Update
+  `README.md`, `Makefile` (`PYTHON_CLIS`), `CONTRIBUTING.md`, and the
+  `migrate-cli.py` reference in `.env.example`. Git history preserves the file.
+
+- [ ] **T17. Extract the shared backup tails into `lib/backup-core.sh` —
+  tails only, not a framework.** The four workers (`runcloud-wp-backup.sh`,
+  `ploi-wp-backup.sh`, `ssh-wp-backup.sh`, `lib/backup-runcloud.sh`) each
+  hand-roll the same ~30-line tail: `unzip -t` verify → cleanup remote zip →
+  cleanup DB dump → `update_status` + final log. Variance is only *which*
+  remote-runner function is called (`remote`, `ploi_source_remote`) and one
+  naming inconsistency (`$DOWNLOADS` vs `$DOWNLOADS_DIR` — unify while there).
+  Helpers take the remote-runner function name as an argument. The discovery /
+  dump logic stays per-worker: that variance is genuine (RunCloud webapps,
+  Ploi admin reading `wp-config.php`, generic siteurl search). Must ship with
+  `tests/lib/backup-core.bats`. Do **not** attempt a unified pipeline — the
+  four paths touch production data mid-campaign.
+
+- [x] **T18. Add minimal CI.** Done: `.github/workflows/ci.yml` runs
+  `make lint && make test` on pushes to `main` and PRs (ubuntu runner;
+  bats-core via npm; shellcheck/python ship with the runner). Getting the
+  suite green surfaced three latent problems, all fixed with this ticket:
+  the find-wp fixture binaries were committed without exec bits (and its
+  fake `ssh` resolved `HOME` through a symlink, so the fixture `wp` was
+  never on `PATH`); the probe scanned real host roots (now containable via
+  `FIND_WP_ROOTS`); and `lib/find-wp.sh` / `ssh-wp-backup.sh` used unquoted
+  `printf wp\n` markers — bash strips unquoted backslashes, so wp-cli
+  detection has always returned `wpn`/`nonen` and the SSH probe could
+  never match a site. All remote markers are now `echo`-based.
+
+- [ ] **T19. Finish T1: fold `run()` / `check_tools()` into
+  `lib/cli_common.py`.** `run()` is byte-identical between `migrate` and
+  `backup`; `check_tools()` differs only in the required-tools list —
+  parameterize it as `check_tools(tools)`. Post-T16 there are exactly two
+  Python CLIs. Leave the Ploi API functions in `migrate`: with the legacy CLI
+  gone there is a single caller, so moving them is speculative.
+
+- [ ] **T20. Backfill `tests/lib/env.bats` and `tests/lib/status.bats`.**
+  `lib/env.sh` (load_env, trim) and `lib/status.sh` (init/update/get over a
+  temp status.tsv) are small, mostly-pure, and cheap to cover — rounds `lib/`
+  to full unit coverage. No backfill for the batch dispatchers or
+  `lib/r2-upload.sh`: thin orchestration and external-tool wrappers where
+  mocks prove little.
+
+- [x] **Housekeeping: fix the two SC2015 lint failures.** Done alongside
+  this round: `lib/backup-runcloud.sh` and `ssh-wp-backup.sh` now use
+  explicit `if` instead of `A && B || C`; `make lint` is green again.
 
 ---
 
-## High leverage (do first)
+## Round 1 (complete)
 
-- [x] **T1. Extract `load_dotenv` / `save_dotenv` / `prompt` / `confirm` into a shared Python module.** Three identical copies in `backup`, `migrate`, and `migrate-cli.py`. Create `lib/cli_common.py` (or similar) and have all three CLIs `import` from it. Zero behaviour change; ~300 lines of duplicated code collapsed into one source of truth.
+All fifteen tickets done. Highlights: shared `lib/cli_common.py` (T1),
+pure-at-source-time `lib/common.sh` split into focused modules (T3/T4),
+unified batch CSV parsing behind `lib/csv.sh` (T5/T13), injectable prompt
+streams + bats harness (T6/T7), single Ploi API client `ploi_curl` (T2/T9),
+documented `BATCH=1` contract and module conventions (T12/T15), ASCII-only
+output (T14).
 
-- [x] **T2. Delete `ploi_source_curl` and its siblings.** After the token consolidation, `ploi_curl` and `ploi_source_curl` differ only in comments. Update the two callers (`ploi-wp-backup.sh`, `pli-site-info.sh`) to call `ploi_curl`. Delete `pli_source_ssh_opts`, `pli_source_ssh_host`, `pli_source_remote`, `pli_source_scp` only if they have no remaining callers; otherwise keep them as thin aliases.
-
-- [x] **T3. Pull side effects out of `lib/common.sh` source time.** Today, sourcing the file runs `load_env "$PROJECT_ROOT/.env"` and `mkdir -p` on four directories. Make `.env` loading and directory creation explicit calls (e.g. `load_env` and `ensure_dirs`) invoked once by each top-level dispatch script (`migrate`, `batch-migrate.sh`, etc.). Sourcing `lib/common.sh` becomes pure — functions only, no I/O. Unlocks unit-testing the shell side.
-
----
-
-## Medium leverage (do once the top three are done)
-
-- [x] **T4. Split `lib/common.sh` into focused sub-modules.** Today it is one 400-line file with 17 unrelated functions. Split into (at minimum):
-  - `lib/output.sh` — `log`/`warn`/`die`/`step`/`ask`/`ask_yn` + ANSI colors
-  - `lib/strings.sh` — `safe_name`/`safe_domain`/`safe_db_name`/`human_bytes`/`random_password`/`trim`/`shquote`/`strip_ansi`
-  - `lib/ploi.sh` — `pli_curl` + (post-T2) the SSH adapter family
-  - `lib/status.sh` — `init_status`/`update_status`/`get_status`
-  
-  Keep `lib/common.sh` as a thin shim that `source`s all of them so no caller changes. Goal is locality, not interface change.
-
-- [x] **T5. Unify the four batch CSV formats behind one helper.** The codebase has four ad-hoc CSV parsers with four slightly different conventions on headers and comments:
-  - `clients.csv` (`user,ip[,domain]`) — parsed in `batch-migrate.sh`
-  - `clients-ploi.csv` (`system_user,domain`) — parsed in `batch-migrate-ploi-source.sh`
-  - `source-servers.csv` (11 columns) — parsed in `migrate`
-  - `pli-zips.csv` (`domain,zip_path`) — parsed in `pli-migrate.sh` (verify)
-  
-  Write one `read_batch_csv(path)` helper that handles comments, blank lines, and optional header rows uniformly. Replace all four call sites. Update the four `.example` files to document one set of conventions.
-
-- [x] **T6. Make `ask` / `ask_yn` accept their input and output streams.** They currently hardcode fd 0 (`read -r`) and fd 1 (`printf`). Change the signatures so tests can pass fakes:
-  ```bash
-  ask() { ask_on "$1" "$2" >&2 <&3; }       # default: stdin/stdout behavior
-  ask_on() { local prompt="$1" default="$2"; ... read -r reply <&3; printf '%s' "${reply:-$default}"; }
-  ```
-  Low priority on its own; required before T7.
-
----
-
-## Testability (depends on T3 and T6)
-
-- [x] **T7. Add a test harness and the first test.** With T3 done (`lib/common.sh` is now pure at source time) and T6 done (`ask`/`ask_yn` accept injectable streams), write a test for the lowest-risk pure function first:
-  - `human_bytes` — pure, ~10 lines, easy to cover
-  - `safe_name` / `safe_domain` / `safe_db_name` — pure string sanitizers
-  - `ask` / `ask_yn` — verify the BATCH=1 short-circuit and the y/n loop using injected streams
-  
-  Pick a framework: `bats` for shell, `pytest` for Python. Commit the framework choice before writing more than one test so the patterns are uniform.
-
-- [ ] **T8. Add a fixture-based test for `lib/find-wp.sh`.** Spin up `sshd` in a container with a fake WordPress install; verify the module finds it, extracts the right version/PHP/DB info, and emits the documented `status=ok` key=value contract. This module is already deep and testable — first end-to-end integration test.
-
-- [x] **T9. Add tests for the Ploi API client.** With T2 done, `pli_curl` is the only API call path. Mock `curl` (or wrap it behind a function variable that tests can override) and verify:
-  - relative vs absolute paths in the URL
-  - `--fail-with-body` fallback when `curl` is old
-  - the `Authorization` / `Accept` / `Content-Type` headers
-  - non-2xx responses propagate correctly
-
----
-
-## Smaller cleanups (do whenever, no dependency)
-
-- [x] **T10. Replace `_PI_COMMON_LOADED` guard with a per-function check or drop it.** The guard only protects against double-sourcing *in the same shell*, which never happens in practice (each script is a new shell). Once T4 splits the file, the guard becomes irrelevant; either drop it or move it into a tiny `_lib_common_loaded` helper.
-
-- [x] **T11. Decide whether the Ploi `api_token` / `api_url` columns belong in `source-servers.csv`.** After the consolidation, the per-server token is redundant with the shared `PLOI_API_TOKEN`. Either:
-  - drop the columns from the CSV header and the `save_source_server` fieldnames entirely, OR
-  - keep them as an explicit per-server override with documented semantics ("blank = use shared token")
-  
-  Right now they exist but their behaviour is undocumented and inconsistently wired (`run_backup` falls back, `pli_probe` falls back, `ask_new_source_server` does not). Pick one and document.
-
-- [x] **T12. Document the `BATCH=1` contract.** Multiple modules branch on `BATCH=1` to return defaults silently. Add a single doc block at the top of `lib/common.sh` (or the new `lib/output.sh` post-T4) listing every function that honours `BATCH` and what it does. Right now you have to grep to find out.
-
-- [x] **T13. Verify `pli-migrate.sh` actually parses `pli-zips.csv`.** The format is documented and an example file ships, but I didn't see the parser in the grep. Confirm the parser exists and matches the documented format, or remove the `.example` file.
-
----
-
-## Doc / hygiene
-
-- [x] **T14. Replace remaining non-ASCII glyphs in the other shell scripts and the Python CLIs.** The character cleanup pass touched only `lib/common.sh`. `pli-wp-backup.sh`, `pli-site-info.sh`, `runcloud-wp-backup.sh`, `batch-migrate.sh`, `migrate`, `migrate-cli.py`, `backup`, etc. still contain `─`, `→`, `✔`, `✖`, `—`, `…`. Decide whether to clean all of them or none (consistency matters more than the choice itself).
-
-- [x] **T15. Add `CONTRIBUTING.md` or extend README with the module conventions.** After T4 the codebase will have a clear shape; capture it in writing so the next contributor doesn't undo it. Document:
-  - where new helpers go (`lib/output.sh`, `lib/strings.sh`, `lib/ploi.sh`, `lib/status.sh`)
-  - the rule against side effects at source time
-  - the rule that modules take env or args, never both for the same thing
-  - the shared-Python-module pattern introduced by T1
+T8 was satisfied differently than written: instead of an sshd-in-container
+test, `tests/lib/find-wp.bats` + `tests/fixtures/find-wp/` use a fake `ssh`
+executable on `PATH` that executes the probe's remote commands against a
+local fixture filesystem. Same coverage of orchestration and the `status=ok`
+key=value contract, no Docker, runs anywhere. Accepted as done.
