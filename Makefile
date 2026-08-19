@@ -9,7 +9,7 @@ SHELL_SCRIPTS := \
   ploi-to-ploi.sh ploi-wp-backup.sh runcloud-site-info.sh \
   runcloud-wp-backup.sh ssh-wp-backup.sh
 
-PYTHON_CLIS := migrate migrate-cli.py backup
+PYTHON_CLIS := migrate backup
 
 test:
 	bats tests/lib/*.bats

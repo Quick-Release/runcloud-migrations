@@ -14,13 +14,11 @@ delete dead code, dedup conservatively, enforce with CI.
 Triage order: T18 first (green baseline for everything after), then the rest
 is independent.
 
-- [ ] **T16. Delete `migrate-cli.py`.** Nothing invokes it; it duplicates
-  `ploi_get_servers`, `ploi_pick_server`, `run`, `check_tools`,
-  `find_latest_zip`, `configure_target`, and `run_ploi_restore` from `migrate`.
-  In an active repo, a duplicated Ploi-API surface is a real risk: fixes
-  applied to `migrate` silently don't reach the legacy copy. Update
-  `README.md`, `Makefile` (`PYTHON_CLIS`), `CONTRIBUTING.md`, and the
-  `migrate-cli.py` reference in `.env.example`. Git history preserves the file.
+- [x] **T16. Delete `migrate-cli.py`.** Done: file removed; references
+  cleaned in `README.md`, `Makefile` (`PYTHON_CLIS`), `CONTRIBUTING.md`,
+  `.env.example`, and the `lib/cli_common.py` docstring. The duplicated
+  Ploi-API surface is gone; `migrate` is the single Python migration CLI.
+  Git history preserves the legacy file.
 
 - [ ] **T17. Extract the shared backup tails into `lib/backup-core.sh` —
   tails only, not a framework.** The four workers (`runcloud-wp-backup.sh`,

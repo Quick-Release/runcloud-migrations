@@ -1,4 +1,4 @@
-"""Shared helpers for the Python CLIs (backup, migrate, migrate-cli.py).
+"""Shared helpers for the Python CLIs (backup, migrate).
 
 Provides:
   - expand_path(value)            - expand a leading ~ to $HOME

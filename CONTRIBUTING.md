@@ -50,8 +50,8 @@ Avoid adding unrelated functions to `lib/common.sh`; it is only a loader.
 
 ### 4. Shared Python helpers live in `lib/cli_common.py`
 
-Any helper used by two or more of `backup`, `migrate`, `migrate-cli.py`
-belongs in `lib/cli_common.py`. Do not copy the helper into another CLI.
+Any helper used by both `backup` and `migrate` belongs in
+`lib/cli_common.py`. Do not copy the helper into another CLI.
 
 ### 5. BATCH=1 contract
 

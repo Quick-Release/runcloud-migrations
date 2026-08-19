@@ -28,7 +28,6 @@ Ploi server      ──backup──▶  ./downloads/<domain>_<ts>.zip  ──res
 | `batch-migrate-ploi.sh` | Runs `ploi-migrate.sh` for every `domain,zip_path` row in a CSV. |
 | `migrate.sh` | End-to-end for a single RunCloud → Ploi site: backup + restore. |
 | `ploi-to-ploi.sh` | End-to-end for a single Ploi → Ploi site: backup + restore. |
-| `migrate-cli.py` | Legacy interactive CLI for a single end-to-end migration (kept for backward compatibility). |
 | `lib/common.sh` | Shared helpers, `.env` loader, status tracking and Ploi API/SSH helpers. |
 | `.env.example` | Template for configuration. |
 | `source-servers.csv.example` | Template for the source-server inventory used by `migrate`. |
@@ -304,7 +303,7 @@ permissions:
 
 | Feature | Required token permissions |
 |---|---|
-| DNS checks in `migrate-cli.py` / `migrate` | `Zone:Read`, `DNS:Edit` |
+| DNS checks in `migrate` | `Zone:Read`, `DNS:Edit` |
 | Sending backup emails via `backup runcloud` | `Email Send` |
 | Uploading to R2 | Uses **R2 S3-compatible credentials** (`R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY`) created in the R2 dashboard, not the Cloudflare API token. |
 
