@@ -15,6 +15,11 @@
 #   db_name=example_db
 #
 # Exit code is always 0 when the probe itself ran; callers should parse status.
+#
+# Env:
+#   FIND_WP_ROOTS  optional space-separated list overriding the default search
+#                 roots. Default expands on the remote ("$HOME", /var/www,
+#                 ...); the override is expanded locally before sending.
 # ----------------------------------------------------------------------------
 
 set -uo pipefail
@@ -45,7 +50,7 @@ remote() { ssh "${SSH_OPTS[@]}" "$SSH_HOST" "$1"; }
 
 # test connection
 # shellcheck disable=SC2016
-if ! remote 'printf ok\n' >/dev/null 2>&1; then
+if ! remote 'echo ok' >/dev/null 2>&1; then
   echo "status=unreachable"
   echo "detail=SSH connection failed to $SSH_HOST"
   exit 0
@@ -55,7 +60,7 @@ fi
 # shellcheck disable=SC2016
 wp_cmd=$(remote '
   if command -v wp >/dev/null 2>&1; then
-    printf wp\n
+    echo wp
   elif command -v php >/dev/null 2>&1; then
     for c in /usr/local/bin/wp-cli.phar /usr/bin/wp-cli.phar /opt/wp-cli.phar "$HOME/wp-cli.phar"; do
       [ -f "$c" ] && { printf "php %s\n" "$c"; exit 0; }
@@ -66,9 +71,9 @@ wp_cmd=$(remote '
     else
       wget -q -O wp-cli.phar https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
     fi && chmod +x wp-cli.phar && { printf "php $HOME/wp-cli.phar\n"; exit 0; }
-    printf none\n
+    echo none
   else
-    printf none\n
+    echo none
   fi
 ')
 
@@ -80,17 +85,27 @@ fi
 # Escape $ so that $HOME (and similar) is expanded by the REMOTE shell, not locally.
 wp_cmd=$(printf '%s' "$wp_cmd" | sed 's/\$/\\$/g')
 
-# find WordPress installs under common roots
-# shellcheck disable=SC2016
-paths=$(remote '
-  for root in "$HOME" /var/www /var/www/html /srv /webapps /usr/share/nginx/html /home /opt /data/coolify/services /var/web; do
-    [ -d "$root" ] || continue
-    find "$root" -maxdepth 7 \( -name wp-config.php -o -name wp-cli.yml \) -type f 2>/dev/null
+# find WordPress installs under common roots (or $FIND_WP_ROOTS when set;
+# the test suite uses FIND_WP_ROOTS to keep the search hermetic)
+if [ -n "${FIND_WP_ROOTS:-}" ]; then
+  roots_expr=""
+  # shellcheck disable=SC2086  # word-splitting is the point
+  for root in $FIND_WP_ROOTS; do
+    roots_expr+="$(shquote "$root") "
+  done
+else
+  # shellcheck disable=SC2016  # "$HOME" must expand on the remote, not here
+  roots_expr='"$HOME" /var/www /var/www/html /srv /webapps /usr/share/nginx/html /home /opt /data/coolify/services /var/web'
+fi
+paths=$(remote "
+  for root in $roots_expr; do
+    [ -d \$root ] || continue
+    find \"\$root\" -maxdepth 7 \( -name wp-config.php -o -name wp-cli.yml \) -type f 2>/dev/null
   done | sort -u | while read -r f; do
-    d=$(dirname "$f")
-    { [ -f "$d/wp-settings.php" ] || [ -f "$d/wp-includes/version.php" ]; } && printf "%s\n" "$d"
+    d=\$(dirname \"\$f\")
+    { [ -f \"\$d/wp-settings.php\" ] || [ -f \"\$d/wp-includes/version.php\" ]; } && printf \"%s\n\" \"\$d\"
   done | sort -u
-')
+")
 
 [ -n "$paths" ] || { echo "status=not_found"; exit 0; }
 

@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # shellcheck, python3, node/npm ship with the ubuntu runner image;
+      # bats-core is the one missing piece.
+      - name: Install bats-core
+        run: sudo npm install -g bats
+
+      - name: Lint (shellcheck + py_compile)
+        run: make lint
+
+      - name: Test (bats)
+        run: make test

@@ -53,7 +53,7 @@ SSH_HOST="${RC_USER}@${RC_IP}"
 remote() { ssh "${SSH_OPTS[@]}" "$SSH_HOST" "$1"; }
 
 step "Connecting to RunCloud server $SSH_HOST ..."
-remote 'printf ok\n' >/dev/null || die "SSH connection failed to $SSH_HOST"
+remote 'echo ok' >/dev/null || die "SSH connection failed to $SSH_HOST"
 
 step "Locating app directory for '$RC_APP_NAME}' ..."
 APP_DIR=$(
@@ -164,8 +164,9 @@ scp -P "$SSH_PORT" -i "$SSH_KEY" \
 
 if [ -f "$LOCAL_ZIP" ]; then
   LOCAL_SIZE=$(stat -f%z "$LOCAL_ZIP" 2>/dev/null || stat -c%s "$LOCAL_ZIP" 2>/dev/null || true)
-  [ -n "$LOCAL_SIZE" ] && [ -n "$REMOTE_SIZE" ] && [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ] || \
-    warn "Local zip size differs from remote; verify $LOCAL_ZIP"
+  if [ -n "$LOCAL_SIZE" ] && [ -n "$REMOTE_SIZE" ] && [ "$LOCAL_SIZE" != "$REMOTE_SIZE" ]; then
+  warn "Local zip size differs from remote; verify $LOCAL_ZIP"
+fi
 fi
 
 step "Uploading backup to R2 ..."

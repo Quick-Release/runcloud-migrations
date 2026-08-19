@@ -90,7 +90,13 @@ bats tests/lib/strings.bats
 
 Add a new `.bats` file under `tests/lib/` for the module you changed. Keep
 tests isolated (use `$BATS_TEST_TMPDIR` for temp files) and avoid touching
-the real `.env` or remote servers.
+the real `.env` or remote servers. The find-wp fixture
+(`tests/fixtures/find-wp/`) shows the hermetic pattern: a fake `ssh` on
+`PATH` runs the probe's remote commands against a local fixture tree, with
+search roots pinned via `FIND_WP_ROOTS` so nothing on the host leaks in.
+
+CI (`.github/workflows/ci.yml`) runs `make lint && make test` on every push
+to `main` and every pull request. Both must pass before a change is merged.
 
 ## Lint
 

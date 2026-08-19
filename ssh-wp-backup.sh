@@ -74,7 +74,7 @@ step "Searching for WordPress install matching $DOMAIN ..."
 # shellcheck disable=SC2016
 wp_cmd=$(remote '
   if command -v wp >/dev/null 2>&1; then
-    printf wp\n
+    echo wp
   elif command -v php >/dev/null 2>&1; then
     for c in /usr/local/bin/wp-cli.phar /usr/bin/wp-cli.phar /opt/wp-cli.phar "$HOME/wp-cli.phar"; do
       [ -f "$c" ] && { printf "php %s\n" "$c"; exit 0; }
@@ -85,12 +85,14 @@ wp_cmd=$(remote '
     else
       wget -q -O wp-cli.phar https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
     fi && chmod +x wp-cli.phar && { printf "php $HOME/wp-cli.phar\n"; exit 0; }
-    printf none\n
+    echo none
   else
-    printf none\n
+    echo none
   fi
 ')
-[ "$wp_cmd" != "none" ] && [ -n "$wp_cmd" ] || die "wp-cli (or php) not available on $SSH_HOST"
+if [ "$wp_cmd" = "none" ] || [ -z "$wp_cmd" ]; then
+  die "wp-cli (or php) not available on $SSH_HOST"
+fi
 # Escape $ so remote variables are not expanded locally.
 wp_cmd=$(printf '%s' "$wp_cmd" | sed 's/\$/\\$/g')
 
