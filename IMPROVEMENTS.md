@@ -61,12 +61,14 @@ is independent.
   `check_tools` call sites. One wording delta: the R2 missing-tool error
   now reads `Missing a required tool (any of: rclone, aws).` + hint.
 
-- [ ] **T20. Backfill `tests/lib/env.bats` and `tests/lib/status.bats`.**
-  `lib/env.sh` (load_env, trim) and `lib/status.sh` (init/update/get over a
-  temp status.tsv) are small, mostly-pure, and cheap to cover — rounds `lib/`
-  to full unit coverage. No backfill for the batch dispatchers or
-  `lib/r2-upload.sh`: thin orchestration and external-tool wrappers where
-  mocks prove little.
+- [x] **T20. Backfill `tests/lib/env.bats` and `tests/lib/status.bats`.**
+  Done: 11 env cases (trim whitespace/CR, file loading, export visibility
+  to child processes, comment/blank/malformed-line skipping, double/single
+  quote stripping, `~` expansion incl. bare `~`, `export ` prefix,
+  env-wins-over-file, missing-file no-op) and 8 status cases (header
+  creation, idempotent init, append + read-back, same-key+phase
+  replacement, phase and site coexistence, newest-row-wins on duplicates,
+  missing-file rc 0). `lib/` is now fully unit-covered; suite is 64 tests.
 
 - [x] **Housekeeping: fix the two SC2015 lint failures.** Done alongside
   this round: `lib/backup-runcloud.sh` and `ssh-wp-backup.sh` now use
