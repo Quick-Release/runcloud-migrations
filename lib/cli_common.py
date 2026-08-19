@@ -6,6 +6,8 @@ Provides:
   - save_dotenv(path, env)        - write env back, preserving comments/order
   - prompt(msg, default, ...)     - interactive prompt with optional default
   - confirm(msg, default=True)    - y/n prompt, returns bool
+  - run(cmd, env, cwd, check)     - stream a shell command to the terminal
+  - check_tools(tools, any_of, ...) - exit if required CLI tools are missing
 
 BATCH=1 contract:
   - prompt() returns its default silently when the environment variable
@@ -22,6 +24,8 @@ Usage from a top-level CLI:
 """
 
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -87,6 +91,42 @@ def save_dotenv(path, env):
 
     path.write_text("\n".join(existing_lines) + "\n")
     os.chmod(path, 0o600)
+
+
+def run(cmd, env=None, cwd=None, check=True):
+    """Run a shell command, streaming output to the terminal."""
+    print(f"\n  -> {cmd}\n")
+    result = subprocess.run(cmd, shell=True, cwd=cwd, env=env)
+    if check and result.returncode != 0:
+        raise RuntimeError(f"Command failed with exit code {result.returncode}")
+    return result
+
+
+def check_tools(tools, any_of=(), any_of_hint=""):
+    """Exit with an error if any required CLI tool is missing.
+
+    Every entry in `tools` must be present; for `any_of` at least one entry
+    must be present (e.g. rclone/aws for R2 uploads). `any_of_hint` is extra
+    guidance appended to the error when that group is missing.
+    """
+    missing = []
+    for tool in tools:
+        check = subprocess.run(["bash", "-c", f"command -v {tool}"], capture_output=True)
+        if check.returncode != 0:
+            missing.append(tool)
+    if missing:
+        print(f"[ERR] Missing required tools: {', '.join(missing)}")
+        sys.exit(1)
+    if any_of:
+        for alt in any_of:
+            check = subprocess.run(["bash", "-c", f"command -v {alt}"], capture_output=True)
+            if check.returncode == 0:
+                return
+        msg = f"[ERR] Missing a required tool (any of: {', '.join(any_of)})."
+        if any_of_hint:
+            msg += f" {any_of_hint}"
+        print(msg)
+        sys.exit(1)
 
 
 def prompt(msg, default=None, secret=False, required=False):

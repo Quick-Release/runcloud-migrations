@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
-from cli_common import load_dotenv, save_dotenv, prompt, confirm, expand_path
+from cli_common import load_dotenv, save_dotenv, prompt, confirm, expand_path, run, check_tools
 
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
@@ -38,36 +38,9 @@ def human_bytes(n):
     return f"{n:.2f} PB"
 
 
-def run(cmd, env=None, cwd=None, check=True):
-    print(f"\n  -> {cmd}\n")
-    result = subprocess.run(cmd, shell=True, cwd=cwd, env=env)
-    if check and result.returncode != 0:
-        raise RuntimeError(f"Command failed with exit code {result.returncode}")
-    return result
-
-
 def run_capture(cmd, env=None, cwd=None):
     result = subprocess.run(cmd, shell=True, cwd=cwd, env=env, capture_output=True, text=True)
     return result.returncode, result.stdout, result.stderr
-
-
-def check_tools():
-    needed = ["bash", "ssh", "scp", "ssh-keygen", "zip", "unzip"]
-    missing = []
-    for tool in needed:
-        check = subprocess.run(["bash", "-c", f"command -v {tool}"], capture_output=True)
-        if check.returncode != 0:
-            missing.append(tool)
-    if missing:
-        print(f"[ERR] Missing required tools: {', '.join(missing)}")
-        sys.exit(1)
-    # rclone or aws is needed for R2 upload
-    for r2_tool in ["rclone", "aws"]:
-        check = subprocess.run(["bash", "-c", f"command -v {r2_tool}"], capture_output=True)
-        if check.returncode == 0:
-            return
-    print("[ERR] Missing an R2 upload tool: install rclone (https://rclone.org) or the AWS CLI v2.")
-    sys.exit(1)
 
 
 def send_email_via_cloudflare(account_id, token, to, from_address, from_name, subject, text, html=None):
@@ -360,7 +333,11 @@ def main():
     subparsers.add_parser("test", help="test R2 bucket read/write credentials")
     args = parser.parse_args()
 
-    check_tools()
+    check_tools(
+        ["bash", "ssh", "scp", "ssh-keygen", "zip", "unzip"],
+        any_of=["rclone", "aws"],
+        any_of_hint="Install rclone (https://rclone.org) or the AWS CLI v2 for R2 uploads.",
+    )
 
     if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
         if confirm(".env not found. Create it from .env.example?", default=True):

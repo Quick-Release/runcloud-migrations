@@ -19,7 +19,8 @@ lib/
   backup-core.sh    - shared backup tail (verify/cleanup/finish helpers
                      used by the backup workers)
   cli_common.py    - shared helpers for the Python CLIs (load_dotenv,
-                     save_dotenv, prompt, confirm, expand_path)
+                     save_dotenv, prompt, confirm, expand_path, run,
+                     check_tools)
   find-wp.sh       - deep module: probe a server for a WordPress install
   backup-runcloud.sh - RunCloud-specific backup orchestration
   r2-upload.sh     - Cloudflare R2 upload helper

@@ -50,12 +50,16 @@ is independent.
   detection has always returned `wpn`/`nonen` and the SSH probe could
   never match a site. All remote markers are now `echo`-based.
 
-- [ ] **T19. Finish T1: fold `run()` / `check_tools()` into
-  `lib/cli_common.py`.** `run()` is byte-identical between `migrate` and
-  `backup`; `check_tools()` differs only in the required-tools list —
-  parameterize it as `check_tools(tools)`. Post-T16 there are exactly two
-  Python CLIs. Leave the Ploi API functions in `migrate`: with the legacy CLI
-  gone there is a single caller, so moving them is speculative.
+- [x] **T19. Finish T1: fold `run()` / `check_tools()` into
+  `lib/cli_common.py`.** Done: `run()` moved verbatim; `check_tools(tools,
+  any_of=(), any_of_hint="")` replaces the two per-CLI copies — the
+  `any_of` group carries what was backup's hardcoded rclone/aws R2 check,
+  with the install hint preserved. `backup` keeps its single-caller
+  `run_capture()` / `human_bytes()` locally. The Ploi API functions stay
+  in `migrate` (single caller). Six new bats cases in
+  `tests/lib/cli_common.bats`; both CLIs smoke-tested through their real
+  `check_tools` call sites. One wording delta: the R2 missing-tool error
+  now reads `Missing a required tool (any of: rclone, aws).` + hint.
 
 - [ ] **T20. Backfill `tests/lib/env.bats` and `tests/lib/status.bats`.**
   `lib/env.sh` (load_env, trim) and `lib/status.sh` (init/update/get over a

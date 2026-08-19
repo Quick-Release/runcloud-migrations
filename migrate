@@ -28,33 +28,12 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
-from cli_common import load_dotenv, save_dotenv, prompt, confirm, expand_path
+from cli_common import load_dotenv, save_dotenv, prompt, confirm, expand_path, run, check_tools
 
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
 ENV_EXAMPLE = ROOT / ".env.example"
 SOURCE_SERVERS_EXAMPLE = ROOT / "source-servers.csv.example"
-
-
-def run(cmd, env=None, cwd=None, check=True):
-    """Run a shell command, streaming output to the terminal."""
-    print(f"\n  -> {cmd}\n")
-    result = subprocess.run(cmd, shell=True, cwd=cwd, env=env)
-    if check and result.returncode != 0:
-        raise RuntimeError(f"Command failed with exit code {result.returncode}")
-    return result
-
-
-def check_tools():
-    needed = ["bash", "ssh", "scp", "ssh-keygen", "curl", "jq", "zip", "unzip"]
-    missing = []
-    for tool in needed:
-        check = subprocess.run(["bash", "-c", f"command -v {tool}"], capture_output=True)
-        if check.returncode != 0:
-            missing.append(tool)
-    if missing:
-        print(f"[ERR] Missing required tools: {', '.join(missing)}")
-        sys.exit(1)
 
 
 def ploi_api_request(token, api_url, path):
@@ -527,7 +506,7 @@ def main():
         print(f"  migrate {domain} -> Ploi")
         print("=" * 60)
 
-        check_tools()
+        check_tools(["bash", "ssh", "scp", "ssh-keygen", "curl", "jq", "zip", "unzip"])
 
         if not ENV_FILE.exists() and ENV_EXAMPLE.exists():
             if confirm(".env not found. Create it from .env.example?", default=True):
